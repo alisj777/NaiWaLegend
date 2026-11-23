@@ -17,6 +17,7 @@ import {
   SideId,
   Unit,
 } from '../battle/entities';
+import { Tutorial } from '../battle/tutorial';
 
 interface Projectile {
   view: Phaser.GameObjects.Graphics;
@@ -48,6 +49,9 @@ interface SideHud {
 }
 
 const CARDS: CardId[] = ['dog', 'mouse', 'powder', 'chicken', 'poop'];
+type ShopKey = keyof typeof B.unlock.shop;
+const unlockedCards = (level: number) => CARDS.filter((c) => B.unlock.cards[c] <= level);
+const SHOP_NAMES: Record<ShopKey, string> = { bottle: '奶瓶', card: '买卡', sell: '卖蛋', chaos: '混沌奶蛋', tea: '奶茶', needle: '解毒针', infect: '主动感染' };
 const CARD_COLORS: Record<CardId, number> = {
   dog: 0x8a5a32,
   mouse: 0x8e7cc3,
@@ -73,6 +77,12 @@ export class BattleScene extends Phaser.Scene {
   private ended = false;
   private pickup: Record<SideId, Poop | null> = { player: null, ai: null };
   private aiThink = 1;
+  /** 新手引导进行中时，AI、成长、自动攻击、天雷投放都暂停 */
+  tutorialActive = false;
+  private wantTutorial = false;
+  private tutorial: Tutorial | null = null;
+  /** 正式对战开始的时刻（引导结束后才开始计时） */
+  private battleStart = 0;
 
   // HUD
   private hud!: Record<SideId, SideHud>;
@@ -82,6 +92,7 @@ export class BattleScene extends Phaser.Scene {
   private logText!: Phaser.GameObjects.Text;
   private cardButtons: Button[] = [];
   private shop: Record<string, Button> = {};
+  private shopLabels: [ShopKey, string][] = [];
   private poopText!: Phaser.GameObjects.Text;
   private friendRows: { text: Phaser.GameObjects.Text; protect: Button; fight: Button; sell: Button }[] = [];
   private pollution!: Phaser.GameObjects.Graphics;
@@ -90,8 +101,12 @@ export class BattleScene extends Phaser.Scene {
     super('Battle');
   }
 
-  init() {
+  init(data: { tutorial?: boolean }) {
     // 场景重开时重置状态
+    this.wantTutorial = !!data?.tutorial;
+    this.tutorialActive = false;
+    this.tutorial = null;
+    this.battleStart = 0;
     this.t = 0;
     this.units = [];
     this.poops = [];
@@ -108,6 +123,7 @@ export class BattleScene extends Phaser.Scene {
     this.logLines = [];
     this.cardButtons = [];
     this.shop = {};
+    this.shopLabels = [];
     this.friendRows = [];
   }
 
@@ -119,7 +135,7 @@ export class BattleScene extends Phaser.Scene {
       id,
       hero: new Hero(this, id, faction, x, FIELD.y + FIELD.h / 2, this.skin),
       coins: B.economy.startCoins,
-      hand: Array.from({ length: B.economy.startCards }, () => Phaser.Utils.Array.GetRandom(CARDS)),
+      hand: Array.from({ length: B.economy.startCards }, () => Phaser.Utils.Array.GetRandom(unlockedCards(1))),
       poops: [0, 0, 0],
       bottle: 0,
       needleMisses: 0,
@@ -136,8 +152,65 @@ export class BattleScene extends Phaser.Scene {
     this.buildHud();
     this.pollution = this.add.graphics().setDepth(200).setVisible(false);
 
+    // 开局手牌固定给一张奶鸡，方便引导和起步经济
+    this.sides.player.hand = ['chicken', 'poop'].slice(0, B.economy.startCards) as CardId[];
+
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => this.onFieldClick(p));
-    this.log('开局！你是光奶蛋，对手是成长速度 2 倍的暗奶蛋。点击场地移动，点击奶屎去捡。');
+    if (this.wantTutorial) {
+      this.tutorialActive = true;
+      this.tutorial = new Tutorial(this);
+    } else {
+      this.startBattle();
+    }
+  }
+
+  /** 引导结束（或跳过）后正式开战 */
+  startBattle() {
+    this.tutorialActive = false;
+    this.tutorial = null;
+    this.battleStart = this.t;
+    this.nextThunder = this.t + B.thunder.startAt;
+    this.sides.player.hero.attackTimer = 1.5;
+    this.sides.ai.hero.attackTimer = 2.5;
+    this.toast('对战开始！你是光奶蛋，对手是成长速度 2 倍的暗奶蛋');
+  }
+
+  private get battleTime() {
+    return this.t - this.battleStart;
+  }
+
+  // ───────── 给新手引导用的钩子 ─────────
+
+  get playerHero() {
+    return this.sides.player.hero;
+  }
+
+  get playerHand() {
+    return this.sides.player.hand;
+  }
+
+  spawnTutorialPoop(x: number, y: number) {
+    return this.spawnPoop(x, y, 1, null);
+  }
+
+  spawnThunderAt(x: number, y: number, warnTime: number = B.thunder.warnTime) {
+    const p = { x, y };
+    clampToField(p);
+    const warn = this.add.graphics().setDepth(4);
+    warn.fillStyle(0xfff27a, 0.25).fillCircle(p.x, p.y, B.thunder.radius);
+    warn.lineStyle(3, 0xfff27a, 0.9).strokeCircle(p.x, p.y, B.thunder.radius);
+    this.tweens.add({ targets: warn, alpha: 0.4, yoyo: true, repeat: -1, duration: 150 });
+    this.thunders.push({ ...p, strikeAt: this.t + warnTime, warn });
+  }
+
+  /** 卡牌位置，引导箭头用 */
+  cardButtonCenter(index: number) {
+    const b = this.cardButtons[index];
+    return b ? { x: b.x + 46, y: b.y } : null;
+  }
+
+  private shopUnlocked(s: Side, key: ShopKey) {
+    return s.hero.level >= B.unlock.shop[key];
   }
 
   // ───────────────────────── 主循环 ─────────────────────────
@@ -147,15 +220,21 @@ export class BattleScene extends Phaser.Scene {
     const dt = Math.min(deltaMs / 1000, 0.05);
     this.t += dt;
 
-    for (const s of Object.values(this.sides)) this.updateGrowth(s, dt);
-    this.updateAI(dt);
+    const tut = this.tutorialActive;
+    if (!tut) {
+      for (const s of Object.values(this.sides)) this.updateGrowth(s, dt);
+      this.updateAI(dt);
+    }
     for (const s of Object.values(this.sides)) this.updateHero(s, dt);
-    this.updateUnits(dt);
+    if (!tut) this.updateUnits(dt);
     this.updateProjectiles(dt);
     this.updateThunder();
     this.updateDance(dt);
-    this.checkBossAndDuel();
-    this.checkWin();
+    if (!tut) {
+      this.checkBossAndDuel();
+      this.checkWin();
+    }
+    this.tutorial?.update();
     this.refreshHud();
   }
 
@@ -190,6 +269,12 @@ export class BattleScene extends Phaser.Scene {
     this.floatText(h.x, h.y - 40, `升级！${h.title}`, '#fff27a');
     this.giveCards(s, B.economy.freeCardsPerLevel);
     this.log(`${this.who(s)}长成了 ${h.title}（Lv${h.level}），获得 ${B.economy.freeCardsPerLevel} 张卡。`);
+    if (s.id === 'player') {
+      const newCards = CARDS.filter((c) => B.unlock.cards[c] === h.level).map((c) => this.cardName(c));
+      const newShop = (Object.keys(B.unlock.shop) as ShopKey[]).filter((k) => B.unlock.shop[k] === h.level).map((k) => SHOP_NAMES[k]);
+      const all = [...newCards, ...newShop];
+      if (all.length) this.toast(`升到 Lv${h.level}！解锁：${all.join('、')}`);
+    }
 
     if (h.level >= B.hero.activeChoiceLevel && !s.protectRewardGiven) {
       s.protectRewardGiven = true;
@@ -205,7 +290,8 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private giveCards(s: Side, n: number) {
-    for (let i = 0; i < n && s.hand.length < B.economy.maxHand; i++) s.hand.push(Phaser.Utils.Array.GetRandom(CARDS));
+    const pool = unlockedCards(s.hero.level);
+    for (let i = 0; i < n && s.hand.length < B.economy.maxHand; i++) s.hand.push(Phaser.Utils.Array.GetRandom(pool));
   }
 
   // ───────────────────────── 主角移动与攻击 ─────────────────────────
@@ -223,6 +309,7 @@ export class BattleScene extends Phaser.Scene {
       else if (h.dist(target) <= B.poop.pickupRange) this.collectPoop(s, target);
     }
 
+    if (this.tutorialActive) return;
     h.attackTimer -= dt;
     if (h.attackTimer <= 0 && !frozen) {
       h.attackTimer = B.hero.attackInterval;
@@ -399,14 +486,16 @@ export class BattleScene extends Phaser.Scene {
 
   private updateThunder() {
     if (this.thunderOff) return;
-    if (this.t >= this.nextThunder) {
+    if (!this.tutorialActive && this.t >= this.nextThunder) {
       this.nextThunder += B.thunder.interval;
-      const p = randomFieldPoint();
-      const warn = this.add.graphics().setDepth(4);
-      warn.fillStyle(0xfff27a, 0.25).fillCircle(p.x, p.y, B.thunder.radius);
-      warn.lineStyle(3, 0xfff27a, 0.9).strokeCircle(p.x, p.y, B.thunder.radius);
-      this.tweens.add({ targets: warn, alpha: 0.4, yoyo: true, repeat: -1, duration: 150 });
-      this.thunders.push({ ...p, strikeAt: this.t + B.thunder.warnTime, warn });
+      let p = randomFieldPoint();
+      // 一部分天雷瞄准光派角色附近落下
+      const lights = [this.sides.player.hero, this.sides.ai.hero, ...this.units].filter((u) => u.alive && u.faction === 'light' && u.kind !== 'fortress');
+      if (lights.length && Math.random() < B.thunder.aimedChance) {
+        const u = Phaser.Utils.Array.GetRandom(lights);
+        p = { x: u.x + Phaser.Math.Between(-60, 60), y: u.y + Phaser.Math.Between(-60, 60) };
+      }
+      this.spawnThunderAt(p.x, p.y);
     }
     for (const th of this.thunders) {
       if (this.t >= th.strikeAt) {
@@ -419,6 +508,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private strike(th: Thunder) {
+    this.events.emit('tut:thunder');
     const bolt = this.add.graphics().setDepth(150);
     bolt.lineStyle(6, 0xfffbd0);
     bolt.beginPath().moveTo(th.x + 30, 0);
@@ -669,7 +759,7 @@ export class BattleScene extends Phaser.Scene {
     this.ended = true;
     this.toast(`${reason}！决斗开始`);
     this.cameras.main.flash(600, 255, 255, 255);
-    this.time.delayedCall(1500, () => this.scene.start('Duel', { playerIsDark: bossSide === 'player', elapsed: this.t }));
+    this.time.delayedCall(1500, () => this.scene.start('Duel', { playerIsDark: bossSide === 'player', elapsed: this.battleTime }));
   }
 
   private checkWin() {
@@ -682,7 +772,7 @@ export class BattleScene extends Phaser.Scene {
     if (this.ended) return;
     this.ended = true;
     this.toast(reason);
-    this.time.delayedCall(1500, () => this.scene.start('Result', { win, reason, elapsed: this.t }));
+    this.time.delayedCall(1500, () => this.scene.start('Result', { win, reason, elapsed: this.battleTime }));
   }
 
   // ───────────────────────── 双方共用的操作 ─────────────────────────
@@ -721,16 +811,17 @@ export class BattleScene extends Phaser.Scene {
         break;
     }
     this.log(`${this.who(s)}打出了 ${this.cardName(card)}`);
+    if (s.id === 'player') this.events.emit('tut:card', card);
   }
 
   buyCard(s: Side) {
-    if (s.coins < B.economy.cardPrice || s.hand.length >= B.economy.maxHand) return;
+    if (!this.shopUnlocked(s, 'card') || s.coins < B.economy.cardPrice || s.hand.length >= B.economy.maxHand) return;
     s.coins -= B.economy.cardPrice;
     this.giveCards(s, 1);
   }
 
   buyTea(s: Side) {
-    if (s.coins < B.economy.teaPrice) return;
+    if (!this.shopUnlocked(s, 'tea') || s.coins < B.economy.teaPrice) return;
     s.coins -= B.economy.teaPrice;
     const outs = B.tea.outcomes;
     let r = Math.random() * outs.reduce((a, o) => a + o.weight, 0);
@@ -753,7 +844,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   buyBottle(s: Side) {
-    if (s.coins < B.economy.bottlePrice) return;
+    if (!this.shopUnlocked(s, 'bottle') || s.coins < B.economy.bottlePrice) return;
     s.coins -= B.economy.bottlePrice;
     s.bottle += B.bottle.capacity;
   }
@@ -767,7 +858,12 @@ export class BattleScene extends Phaser.Scene {
   }
 
   canNeedle(s: Side) {
-    return s.hero.faction === 'light' && s.coins >= B.economy.needlePrice && this.sides[other(s.id)].hero.faction === 'dark';
+    return (
+      this.shopUnlocked(s, 'needle') &&
+      s.hero.faction === 'light' &&
+      s.coins >= B.economy.needlePrice &&
+      this.sides[other(s.id)].hero.faction === 'dark'
+    );
   }
 
   throwNeedle(s: Side) {
@@ -818,6 +914,7 @@ export class BattleScene extends Phaser.Scene {
     p.destroy();
     this.pickup[s.id] = null;
     s.poops[p.level - 1]++;
+    if (s.id === 'player') this.events.emit('tut:collect');
     this.floatText(p.x, p.y - 20, `捡到 Lv${p.level} 奶屎`, '#e8dcc0');
     for (let lv = 0; lv < B.poop.maxLevel - 1; lv++) {
       while (s.poops[lv] >= B.poop.mergeCount) {
@@ -901,6 +998,7 @@ export class BattleScene extends Phaser.Scene {
     }
     this.pickup.player = null;
     s.hero.moveTarget = { x: p.x, y: p.y };
+    this.events.emit('tut:move');
     const ring = this.add.graphics().setDepth(3);
     ring.lineStyle(2, 0xffffff, 0.8).strokeCircle(p.x, p.y, 12);
     this.tweens.add({ targets: ring, alpha: 0, scale: 1.6, duration: 400, onComplete: () => ring.destroy() });
@@ -932,7 +1030,7 @@ export class BattleScene extends Phaser.Scene {
     const enemy = this.sides.player.hero;
     if (s.bottle > 0 && h.hp <= B.hero.maxHp - 2) for (let i = 0; i < 5; i++) this.drink(s);
     if (s.poops[2] > 0) h.hp <= 24 ? this.eatPoop(s) : this.buildFortress(s);
-    if (s.hand.length) this.playCard(s, 0);
+    if (s.hand.length && Math.random() < B.ai.playCardChance) this.playCard(s, 0);
     if (this.chaosFaction(s)) this.makeChaos(s);
     if (this.canNeedle(s) && h.dist(enemy) < 550 && Math.random() < 0.5) this.throwNeedle(s);
     if (this.canInfect(s)) this.infect(s);
@@ -1012,6 +1110,7 @@ export class BattleScene extends Phaser.Scene {
     ];
     shopDefs.forEach(([key, text, fn, color], i) => {
       this.shop[key] = new Button(this, 20 + i * 126, 600, 120, 52, text, fn, color);
+      if (key in B.unlock.shop) this.shopLabels.push([key as ShopKey, text]);
     });
 
     label(this, 1040, 518, `朋友（各 ${B.friends.hp} 血）`, 13, '#9aa4b8');
@@ -1048,8 +1147,8 @@ export class BattleScene extends Phaser.Scene {
       ui.status.setText(st.join('   '));
     }
 
-    const nt = this.thunderOff ? '天雷已消失' : `下一道天雷 ${Math.max(0, this.nextThunder - this.t).toFixed(0)}s`;
-    this.clockText.setText(`${this.t.toFixed(0)}s\n${nt}`);
+    const nt = this.tutorialActive ? '新手引导中' : this.thunderOff ? '天雷已消失' : `下一道天雷 ${Math.max(0, this.nextThunder - this.t).toFixed(0)}s`;
+    this.clockText.setText(`${this.tutorialActive ? 0 : this.battleTime.toFixed(0)}s\n${nt}`);
 
     const p = this.sides.player;
     this.cardButtons.forEach((b, i) => {
@@ -1063,9 +1162,14 @@ export class BattleScene extends Phaser.Scene {
     this.shop.eat.setEnabled(p.poops[2] > 0);
     this.shop.fort.setEnabled(p.poops[2] > 0);
     const E = B.economy;
-    this.shop.card.setEnabled(p.coins >= E.cardPrice && p.hand.length < E.maxHand);
-    this.shop.tea.setEnabled(p.coins >= E.teaPrice);
-    this.shop.bottle.setEnabled(p.coins >= E.bottlePrice);
+    // 未解锁的道具显示解锁等级
+    for (const [key, text] of this.shopLabels) {
+      const lv = B.unlock.shop[key];
+      this.shop[key].setLabel(this.shopUnlocked(p, key) ? text : `${SHOP_NAMES[key]}\n🔒 Lv${lv} 解锁`);
+    }
+    this.shop.card.setEnabled(this.shopUnlocked(p, 'card') && p.coins >= E.cardPrice && p.hand.length < E.maxHand);
+    this.shop.tea.setEnabled(this.shopUnlocked(p, 'tea') && p.coins >= E.teaPrice);
+    this.shop.bottle.setEnabled(this.shopUnlocked(p, 'bottle') && p.coins >= E.bottlePrice);
     this.shop.drink.setLabel(`喝奶瓶（连点）\n剩 ${p.bottle.toFixed(1)} 血`).setEnabled(p.bottle > 0);
     this.shop.needle.setEnabled(this.canNeedle(p));
     this.shop.infect.setEnabled(this.canInfect(p));

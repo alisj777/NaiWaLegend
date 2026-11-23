@@ -135,3 +135,43 @@ export function drawBow(g: G) {
   g.fillStyle(0xff7eb6).fillTriangle(0, 0, -9, -6, -9, 6).fillTriangle(0, 0, 9, -6, 9, 6);
   g.fillStyle(0xff4f9a).fillCircle(0, 0, 2.5);
 }
+
+/** 牛马村的牛（剧情用） */
+export function drawCow(g: G, dizzy = false) {
+  g.clear();
+  g.fillStyle(0xf5f5f0).fillRoundedRect(-40, -20, 80, 44, 16);
+  g.fillStyle(0x333333).fillEllipse(-14, -4, 22, 16).fillEllipse(18, 10, 16, 12);
+  g.fillStyle(0xf5f5f0).fillRect(-34, 18, 10, 22).fillRect(24, 18, 10, 22);
+  g.fillStyle(0xf5f5f0).fillCircle(44, -22, 18);
+  g.fillStyle(0xf2b8c6).fillEllipse(54, -16, 18, 12);
+  g.fillStyle(0xd9c7a0).fillTriangle(34, -38, 38, -50, 42, -38).fillTriangle(48, -38, 52, -50, 56, -38);
+  if (dizzy) {
+    g.lineStyle(2, 0x222222).strokeCircle(42, -26, 4).strokeCircle(52, -26, 4);
+  } else {
+    g.fillStyle(0x222222).fillCircle(42, -26, 2.5).fillCircle(52, -26, 2.5);
+  }
+}
+
+/** 牛马村的马（剧情用） */
+export function drawHorse(g: G, dizzy = false) {
+  g.clear();
+  g.fillStyle(0xa86b3c).fillRoundedRect(-38, -16, 76, 38, 16);
+  g.fillStyle(0xa86b3c).fillRect(-32, 18, 9, 24).fillRect(24, 18, 9, 24);
+  g.fillStyle(0xa86b3c).fillTriangle(26, -10, 40, -48, 52, -40);
+  g.fillStyle(0xa86b3c).fillEllipse(54, -44, 30, 18);
+  g.fillStyle(0x4a2e18).fillTriangle(24, -14, 34, -50, 30, -12);
+  g.fillStyle(0x4a2e18).fillRect(-44, -12, 8, 26);
+  if (dizzy) g.lineStyle(2, 0x222222).strokeCircle(54, -48, 4);
+  else g.fillStyle(0x222222).fillCircle(54, -48, 2.5);
+}
+
+export function drawBolt(g: G, x: number, y1: number, y2: number) {
+  g.lineStyle(6, 0xfff27a);
+  g.beginPath().moveTo(x, y1);
+  let cx = x;
+  for (let y = y1 + 30; y < y2; y += 30) {
+    cx += y % 60 === 0 ? 18 : -18;
+    g.lineTo(cx, y);
+  }
+  g.lineTo(x, y2).strokePath();
+}
