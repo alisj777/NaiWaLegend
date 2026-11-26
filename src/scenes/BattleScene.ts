@@ -4,6 +4,8 @@ import { currentSkin, Skin } from '../skins';
 import * as art from '../battle/art';
 import { Button, label } from '../battle/ui';
 import { Tutorial } from '../battle/tutorial';
+import { fitScreen, fullBg } from '../battle/layout';
+import { stopBgm } from '../battle/music';
 import { BattleEvent, BattleWorld, CardId, FIELD, Hero, Poop, SHOP_NAMES, ShopKey, SideId, Unit } from '../battle/logic/battle';
 
 /**
@@ -89,6 +91,9 @@ export class BattleScene extends Phaser.Scene {
   create() {
     this.skin = currentSkin();
     this.w = new BattleWorld(this.skin);
+    fitScreen(this);
+    // 对战暂时没有专属音乐，先停掉上一段的背景音乐
+    stopBgm(this);
     this.drawField();
     this.buildHud();
     this.pollution = this.add.graphics().setDepth(200).setVisible(false);
@@ -362,10 +367,13 @@ export class BattleScene extends Phaser.Scene {
 
   private onFieldClick(p: Phaser.Input.Pointer) {
     if (this.w.ended) return;
-    if (p.y < FIELD.y || p.y > FIELD.y + FIELD.h) return;
-    if (this.w.moveTo(this.w.sides.player, p.x, p.y) !== 'move') return;
+    // 世界坐标：全屏适配后镜头会平移
+    const x = p.worldX;
+    const y = p.worldY;
+    if (y < FIELD.y || y > FIELD.y + FIELD.h || x < FIELD.x || x > FIELD.x + FIELD.w) return;
+    if (this.w.moveTo(this.w.sides.player, x, y) !== 'move') return;
     const ring = this.add.graphics().setDepth(3);
-    ring.lineStyle(2, 0xffffff, 0.8).strokeCircle(p.x, p.y, 12);
+    ring.lineStyle(2, 0xffffff, 0.8).strokeCircle(x, y, 12);
     this.tweens.add({ targets: ring, alpha: 0, scale: 1.6, duration: 400, onComplete: () => ring.destroy() });
   }
 
@@ -373,7 +381,7 @@ export class BattleScene extends Phaser.Scene {
 
   private drawField() {
     const c = this.skin.colors;
-    this.add.rectangle(0, 0, 1280, 720, 0x1d2330).setOrigin(0);
+    fullBg(this, 0x1d2330);
     this.add.graphics().fillStyle(c.field).fillRoundedRect(FIELD.x, FIELD.y, FIELD.w, FIELD.h, 18).lineStyle(4, 0x5a3e24).strokeRoundedRect(FIELD.x, FIELD.y, FIELD.w, FIELD.h, 18);
     const g = this.add.graphics();
     g.lineStyle(2, c.fieldLine, 0.6);

@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
-import { Button, label } from '../battle/ui';
+import { Button, THEME, bodyText, scrollPanel, titleText } from '../battle/ui';
+import { fitScreen, fullBg } from '../battle/layout';
 
 export class ResultScene extends Phaser.Scene {
   constructor() {
@@ -7,11 +8,13 @@ export class ResultScene extends Phaser.Scene {
   }
 
   create(data: { win: boolean; reason: string; elapsed: number }) {
-    this.add.rectangle(0, 0, 1280, 720, data.win ? 0x1f3326 : 0x33201f).setOrigin(0);
-    label(this, 640, 220, data.win ? '胜利！' : '失败', 72, data.win ? '#fff27a' : '#ff8a80').setOrigin(0.5);
-    label(this, 640, 320, data.reason, 24).setOrigin(0.5);
-    label(this, 640, 365, `用时 ${Math.round(data.elapsed)} 秒`, 18, '#9aa4b8').setOrigin(0.5);
-    new Button(this, 430, 450, 200, 60, '再来一局', () => this.scene.start('Battle', { tutorial: false }), 0x3b6e9b);
-    new Button(this, 650, 450, 200, 60, '返回菜单', () => this.scene.start('Menu'));
+    fitScreen(this);
+    fullBg(this, data.win ? 0x3d5a2e : 0x4a2a26);
+    scrollPanel(this, 300, 150, 680, 400);
+    titleText(this, 640, 230, data.win ? '胜利！' : '失败', 72).setOrigin(0.5).setColor(data.win ? THEME.title : '#ff9a8a');
+    bodyText(this, 640, 320, data.reason, 24).setOrigin(0.5);
+    bodyText(this, 640, 362, `用时 ${Math.round(data.elapsed)} 秒`, 18).setOrigin(0.5).setColor(THEME.textSoft);
+    new Button(this, 420, 440, 200, 64, '再来一局', () => this.scene.start('Battle', { tutorial: false }), THEME.orange);
+    new Button(this, 660, 440, 200, 64, '返回菜单', () => this.scene.start('Menu'), THEME.blue);
   }
 }

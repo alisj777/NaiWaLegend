@@ -3,7 +3,8 @@ import { BALANCE as B } from '../config/balance';
 import { currentSkin } from '../skins';
 import type { BattleScene } from '../scenes/BattleScene';
 import { FONT } from './art';
-import { Button } from './ui';
+import { Button, THEME, bodyText, scrollPanel } from './ui';
+import { Guide, showGuide } from './guide';
 import { FIELD, Poop } from './logic/battle';
 
 type Wait = 'move' | 'collect' | 'card:chicken' | 'thunder' | 'next';
@@ -32,6 +33,8 @@ export class Tutorial {
   private poop: Poop | null = null;
   private moveTarget: { x: number; y: number } | null = null;
   private done = false;
+  /** 引导角色「系统」，停在说明框左边 */
+  private guide: Guide;
 
   constructor(private scene: BattleScene) {
     const skin = currentSkin();
@@ -100,14 +103,17 @@ export class Tutorial {
     const h = 120;
     const x = 640 - w / 2;
     const y = FIELD.y + 8;
-    const bg = scene.add.rectangle(0, 0, w, h, 0x10141c, 0.92).setOrigin(0).setStrokeStyle(2, 0xfff27a, 0.8);
+    // 奶油色说明框，和全游戏统一风格
+    const frame = scrollPanel(scene, -30, 0, w + 60, h);
+    const bg = scene.add.rectangle(0, 0, w, h, 0xffffff, 0.001).setOrigin(0);
     // 点在面板上不触发场地移动
     bg.setInteractive().on('pointerdown', (_p: unknown, _x: unknown, _y: unknown, e: Phaser.Types.Input.EventData) => e.stopPropagation());
-    this.titleText = scene.add.text(16, 10, '', { fontFamily: FONT, fontSize: '18px', color: '#fff27a' });
-    this.bodyText = scene.add.text(16, 38, '', { fontFamily: FONT, fontSize: '14px', color: '#ffffff', wordWrap: { width: w - 150 }, lineSpacing: 4 });
-    this.nextBtn = new Button(scene, w - 120, 14, 104, 40, '下一步', () => this.current?.wait === 'next' && this.advance(), 0x3b6e9b);
-    const skip = new Button(scene, w - 120, 64, 104, 40, '跳过引导', () => this.finish(), 0x555555);
-    this.panel = scene.add.container(x, y, [bg, this.titleText, this.bodyText, this.nextBtn, skip]).setDepth(400);
+    this.titleText = scene.add.text(20, 12, '', { fontFamily: FONT, fontSize: '19px', color: '#b5501d', fontStyle: 'bold' });
+    this.bodyText = bodyText(scene, 20, 40, '', 14, w - 160);
+    this.nextBtn = new Button(scene, w - 124, 12, 108, 46, '下一步', () => this.current?.wait === 'next' && this.advance(), THEME.orange);
+    const skip = new Button(scene, w - 124, 64, 108, 44, '跳过引导', () => this.finish(), THEME.grey);
+    this.panel = scene.add.container(x, y, [frame, bg, this.titleText, this.bodyText, this.nextBtn, skip]).setDepth(400);
+    this.guide = showGuide(scene, x - 70, y + 70, { from: 'left', height: 170, depth: 401, delay: 200 });
     this.arrow = scene.add.graphics().setDepth(390);
     this.arrow.fillStyle(0xfff27a).fillTriangle(-14, -30, 14, -30, 0, -6);
     this.arrow.fillStyle(0xfff27a).fillRect(-5, -52, 10, 24);
@@ -155,6 +161,7 @@ export class Tutorial {
     for (const e of ['tut:move', 'tut:collect', 'tut:card', 'tut:thunder']) this.scene.events.off(e);
     this.panel.destroy();
     this.arrow.destroy();
+    this.guide.leave();
     this.scene.startBattle();
   }
 }

@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { fitScreen, fullBg } from '../battle/layout';
 import { BALANCE } from '../config/balance';
 import { currentSkin } from '../skins';
 import * as art from '../battle/art';
@@ -54,7 +55,8 @@ export class DuelScene extends Phaser.Scene {
   create() {
     const skin = currentSkin();
     const playerIsDark: boolean = this.registry.get('duelPlayerIsDark');
-    this.add.rectangle(0, 0, 1280, 720, 0x161a24).setOrigin(0);
+    fitScreen(this);
+    fullBg(this, 0x161a24);
     const g = this.add.graphics();
     g.fillStyle(0x2b2140).fillEllipse(640, 360, 1100, 560);
     g.lineStyle(4, 0x5b3a7a).strokeEllipse(640, 360, 1100, 560);
@@ -90,7 +92,7 @@ export class DuelScene extends Phaser.Scene {
     kb.on('keydown-D', () => this.twist(this.player, 1));
     kb.on('keydown-RIGHT', () => this.twist(this.player, 1));
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
-      if (p.y < 360) this.shoot(this.player, this.ai, 'player');
+      if (p.worldY < 360) this.shoot(this.player, this.ai, 'player');
     });
   }
 

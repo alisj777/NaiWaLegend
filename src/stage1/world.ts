@@ -36,8 +36,14 @@ export interface Actor {
   carry: Item | null;
   /** 被狂风卷在空中，直到这个时间 */
   flyUntil: number;
-  /** 被扔出场外，直到这个时间才回到场边 */
+  /** 被扔出场外的时刻起为 Infinity：无法返回，直接出局 */
   outUntil: number;
+  /** 被狂风卷出场外、出局了 */
+  gone: boolean;
+  /** 最近一次原地转身的时刻（转身后要推住 turnHold 秒才开始走） */
+  turnAt: number;
+  /** 最近一次走完一格的时刻，用来判断是"站定后换方向"还是"边走边拐弯" */
+  stepEndAt: number;
   actionReadyAt: number;
 }
 
@@ -117,7 +123,7 @@ export class World {
     return x >= 0 && y >= 0 && x < this.cols && y < this.rows;
   }
   addActor(a: Pick<Actor, 'id' | 'name' | 'human' | 'cx' | 'cy' | 'speed'>) {
-    const actor: Actor = { ...a, fx: a.cx, fy: a.cy, moveT: 1, facing: 'down', wantDir: null, carry: null, flyUntil: 0, outUntil: 0, actionReadyAt: 0 };
+    const actor: Actor = { ...a, fx: a.cx, fy: a.cy, moveT: 1, facing: 'down', wantDir: null, carry: null, flyUntil: 0, outUntil: 0, gone: false, turnAt: -1, stepEndAt: -1, actionReadyAt: 0 };
     this.actors.push(actor);
     return actor;
   }
@@ -229,14 +235,14 @@ export class World {
     return s;
   }
 
-  /** 排名：分数高在前，随机打破平局 */
+  /** 排名：出局的排最后；其余分数高在前，同分随机 */
   ranking() {
     return this.actors
       .map((a) => {
         if (!this.tieBreak.has(a.id)) this.tieBreak.set(a.id, Math.random());
         return { actor: a, score: this.score(a.id), tie: this.tieBreak.get(a.id)! };
       })
-      .sort((p, q) => q.score - p.score || p.tie - q.tie);
+      .sort((p, q) => Number(p.actor.gone) - Number(q.actor.gone) || q.score - p.score || p.tie - q.tie);
   }
 
   /** 庇护所里的满瓶（带进下一关当道具） */
@@ -376,16 +382,29 @@ export class World {
     if (this.isBusy(a)) return;
     if (a.moveT < 1) {
       a.moveT = Math.min(1, a.moveT + dt * C.moveTilesPerSec * a.speed);
+      if (a.moveT >= 1) a.stepEndAt = this.t;
     }
     if (a.moveT >= 1 && a.wantDir) {
-      a.facing = a.wantDir;
-      const [dx, dy] = DIRS[a.wantDir];
-      if (this.passable(a, a.cx + dx, a.cy + dy)) {
-        a.fx = a.cx;
-        a.fy = a.cy;
-        a.cx += dx;
-        a.cy += dy;
-        a.moveT = 0;
+      // 玩家站定后换方向：先原地转身，推住超过 turnHold 秒才走（边走边拐弯不受影响，AI 也不受影响）
+      const standing = this.t - a.stepEndAt > 0.05;
+      let step = true;
+      if (a.human && standing && a.wantDir !== a.facing) {
+        a.facing = a.wantDir;
+        a.turnAt = this.t;
+        step = false;
+      } else if (a.human && standing && this.t - a.turnAt < C.turnHold) {
+        step = false;
+      }
+      if (step) {
+        a.facing = a.wantDir;
+        const [dx, dy] = DIRS[a.wantDir];
+        if (this.passable(a, a.cx + dx, a.cy + dy)) {
+          a.fx = a.cx;
+          a.fy = a.cy;
+          a.cx += dx;
+          a.cy += dy;
+          a.moveT = 0;
+        }
       }
     }
     // 举着空瓶站到灵泉边，自动装满
@@ -499,12 +518,12 @@ export class World {
     a.moveT = 1;
     a.wantDir = null;
     if (Math.random() < W.outChance) {
-      // 飘出场外：手上的物资丢失
-      const lost = a.carry;
+      // 飘出场外：无法返回，直接出局（手上的物资也没了）
       a.carry = null;
+      a.gone = true;
       a.flyUntil = this.t + W.flyTime;
-      a.outUntil = this.t + W.flyTime + W.outRespawn;
-      this.events.push({ type: 'toast', text: lost ? TX.toast.blownOutLost(a.name, itemName(lost)) : TX.toast.blownOut(a.name), actor: a.id });
+      a.outUntil = Infinity;
+      this.events.push({ type: 'toast', text: TX.toast.blownOut(a.name), actor: a.id });
       return;
     }
     const p = this.randomTile((x, y) => this.passable(a, x, y) && this.interior[this.idx(x, y)] === -1);

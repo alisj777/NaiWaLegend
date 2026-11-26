@@ -18,6 +18,15 @@ export interface Platform {
   vibrate(ms?: number): void;
   /** 分享（网页暂不实现，小游戏用 wx.shareAppMessage） */
   share(title: string): void;
+  /**
+   * 激励视频广告：看完返回 true，中途关闭返回 false。
+   * 网页版没有广告，直接返回 true 方便测试；微信版改用 wx.createRewardedVideoAd。
+   */
+  showRewardedAd(placement: string): Promise<boolean>;
+  /** 游戏引擎启动后，关掉引擎加载前显示的启动画面（网页是 index.html 里的 #splash） */
+  hideSplash(): void;
+  /** 等字体加载好（最多等 timeout 毫秒）；小游戏用 wx.loadFont */
+  waitFont(family: string, timeout: number): Promise<void>;
 }
 
 type LockableOrientation = ScreenOrientation & { lock?: (o: string) => Promise<void> };
@@ -49,6 +58,16 @@ const web: Platform = {
   },
   vibrate: (ms = 15) => navigator.vibrate?.(ms),
   share: () => {},
+  hideSplash: () => document.getElementById('splash')?.remove(),
+  waitFont: (family, timeout) =>
+    Promise.race([
+      document.fonts?.load(`40px "${family}"`, '奶').then(() => undefined) ?? Promise.resolve(),
+      new Promise<void>((r) => setTimeout(r, timeout)),
+    ]).catch(() => undefined),
+  showRewardedAd: async (placement) => {
+    console.info(`[广告位] ${placement}：网页版没有广告，直接视为看完`);
+    return true;
+  },
 };
 
 function detect(): Platform {

@@ -1,34 +1,35 @@
 import Phaser from 'phaser';
 import { currentSkin, Skin } from '../skins';
 import * as art from '../battle/art';
-import { Button, label } from '../battle/ui';
+import { Button, THEME, bodyText, label, pill, scrollPanel } from '../battle/ui';
+import { fitScreen, fullBg, screenEdges } from '../battle/layout';
+import { duckBgm, playBgm } from '../battle/music';
+import { Guide, showGuide } from '../battle/guide';
 import { STORY, StoryPanelId } from '../copy/story';
+import { BgmKey, STORY_IMAGES, StoryImageKey, storyKey } from '../assets';
 
-/**
- * 剧情插画：由 tools/prepare_assets.py 从 art/reference 处理生成到 public/assets/story/。
- * 缺图的页面自动用代码画的占位图。
- */
-const IMAGES = {
-  family: 'assets/story/family.jpg', // 奶蛙家族全家福
-  growth: 'assets/story/growth.jpg', // 成长之路：奶蛋 → 小奶蛙 → 奶蛙
-  doom: 'assets/story/doom.jpg', // 末世：花草枯萎、病毒紫雾、天雷
-  winter: 'assets/story/winter.jpg', // 寒冬的村子
-  dying: 'assets/story/dying.jpg', // 奄奄一息的奶蛙
-  rebirth: 'assets/story/rebirth.jpg', // 重生
-};
-type ImageKey = keyof typeof IMAGES;
-const SOUNDS = {
-  laugh: 'story/laugh-group.mp3', // 多人大笑（全家福那一页播放）
-};
+/** 剧情插画和音频在 src/assets.ts，由启动加载页统一预载；缺图的页面自动用代码画的占位图 */
+type ImageKey = StoryImageKey;
 
-/** 一页配多张图时，每张停留多久再淡入下一张（毫秒） */
-const SLIDE_HOLD = 2600;
+/** 一页配多张图时：文字打完后再停多久淡入下一张、淡入用多久（毫秒） */
+const SLIDE_AFTER_TEXT = 900;
 const SLIDE_FADE = 1200;
+/** 文字框（浮在画面下方的奶油色对话框） */
+const BOX = { x: 70, y: 548, w: 1140, h: 156 };
 
 interface PanelArt {
-  /** 有图就显示图片（多张会依次淡入），否则用 draw 画占位 */
+  /** 有图就显示图片（多张时，文字打完后依次淡入下一张），否则用 draw 画占位 */
   image?: ImageKey | ImageKey[];
-  sound?: 'laugh';
+  /** 某张图出现时播放的声音 */
+  sound?: { on: ImageKey; key: 'laugh' };
+  /** 引导角色「系统」在第几段文字开始时飘进来（从 0 算）；不填表示这一页没有系统 */
+  systemAtPart?: number;
+  /** 角色说话页：名字标签显示 title（蓝色，不带页码） */
+  speaker?: boolean;
+  /** 这一页文字框重新从下方浮上来（和角色一起登场） */
+  entrance?: boolean;
+  /** 这一页的背景音乐（和上一页相同就接着放，不同就淡入淡出切换） */
+  bgm: BgmKey;
   draw: (s: StoryScene, skin: Skin) => void;
 }
 
@@ -39,8 +40,10 @@ const ART_H = 560;
 /** 每页插画，按 id 对应 src/copy/story.ts 里的文案 */
 const ART: Record<StoryPanelId, PanelArt> = {
   village: {
-    image: 'family',
-    sound: 'laugh',
+    // 先只有奶家村，文字框浮出、字打完后，全家福淡入并大笑
+    image: ['village', 'family'],
+    sound: { on: 'family', key: 'laugh' },
+    bgm: 'happy',
     draw: (s, skin) => {
       // 占位：奶蛙家族全家福
       s.ground();
@@ -61,6 +64,7 @@ const ART: Record<StoryPanelId, PanelArt> = {
   },
   growth: {
     image: 'growth',
+    bgm: 'happy',
     draw: (s, skin) => {
       s.ground();
       [1, 2, 3, 4].forEach((lv, i) => {
@@ -75,6 +79,8 @@ const ART: Record<StoryPanelId, PanelArt> = {
     },
   },
   split: {
+    image: 'split',
+    bgm: 'happy',
     draw: (s, skin) => {
       s.ground();
       s.put((g) => art.drawHero(g, 4, skin.colors.light), 640, 250, 2.2);
@@ -94,7 +100,9 @@ const ART: Record<StoryPanelId, PanelArt> = {
     },
   },
   doom: {
-    image: 'doom',
+    // 先是极寒冰封的村子，再切到病毒和天雷肆虐的末世
+    image: ['winter', 'doom'],
+    bgm: 'doom',
     draw: (s, skin) => {
       s.ground(0x2e3b2a);
       s.sky(0x10131c);
@@ -109,8 +117,9 @@ const ART: Record<StoryPanelId, PanelArt> = {
     },
   },
   winter: {
-    // 先是冰封的村子，再淡入奄奄一息的奶蛙（"在冷风中你闭上了眼睛"）
-    image: ['winter', 'dying'],
+    // 上一世死去的那一刻：一进来就是奄奄一息的奶蛙（"在冷风中你闭上了眼睛"）
+    image: 'dying',
+    bgm: 'doom',
     draw: (s, skin) => {
       s.ground(0xdfe8ef);
       s.sky(0x141a26);
@@ -119,7 +128,10 @@ const ART: Record<StoryPanelId, PanelArt> = {
     },
   },
   rebirth: {
+    // 重生 + 系统登场合并成一页：第 2 段"你的眼前出现了一个系统"时，系统从右边飘进来
     image: 'rebirth',
+    bgm: 'rebirth',
+    systemAtPart: 1,
     draw: (s, skin) => {
       // 占位：重生画面
       s.layer.add(s.add.rectangle(0, 0, 1280, ART_H, 0x0e1220).setOrigin(0));
@@ -139,42 +151,62 @@ const PANELS = STORY.panels.map((p) => ({ ...p, ...ART[p.id] }));
 export class StoryScene extends Phaser.Scene {
   private index = 0;
   layer!: Phaser.GameObjects.Container;
+  private box!: Phaser.GameObjects.Container;
   private textObj!: Phaser.GameObjects.Text;
-  private titleObj!: Phaser.GameObjects.Text;
+  private tag?: Phaser.GameObjects.Container;
   private full = '';
+  /** 当前页分成的几段文字，以及正在显示第几段 */
+  private parts: string[] = [];
+  private partIndex = 0;
   private shown = 0;
   private typing?: Phaser.Time.TimerEvent;
+  private slides: { img: Phaser.GameObjects.Image; key: ImageKey }[] = [];
+  private slideIndex = 0;
   private slideTimer?: Phaser.Time.TimerEvent;
   private nextBtn!: Button;
+  private skipBtn!: Button;
+  /** 引导角色「系统」（出现在对话框右上方） */
+  private guide?: Guide;
+  /** 当前页的音效（比如大笑），翻页时只停它，不停背景音乐 */
+  private sfx?: Phaser.Sound.BaseSound;
+  /** 正在补加载缺失的插画，期间不响应翻页 */
+  private loadingMissing = false;
 
   constructor() {
     super('Story');
   }
 
-  preload() {
-    for (const [k, url] of Object.entries(IMAGES)) this.load.image(`story-${k}`, url);
-    for (const [k, url] of Object.entries(SOUNDS)) this.load.audio(`story-${k}`, url);
-  }
-
   create() {
     this.index = 0;
-    this.add.rectangle(0, 0, 1280, 720, 0x1d2330).setOrigin(0);
+    this.slides = [];
+    this.loadingMissing = false;
+    fitScreen(this, () => this.placeEdges());
+    fullBg(this, 0x1d2330);
     this.layer = this.add.container(0, 0);
-    // 上面 0~560 是插画区，下面 160 像素是文字框
-    this.add.graphics().fillStyle(0x10141c, 0.95).fillRoundedRect(0, ART_H, 1280, 720 - ART_H, { tl: 20, tr: 20, bl: 0, br: 0 });
-    this.titleObj = label(this, 60, ART_H + 12, '', 22, '#fff27a');
-    this.textObj = this.add.text(60, ART_H + 46, '', {
-      fontFamily: art.FONT,
-      fontSize: '20px',
-      color: '#ffffff',
-      wordWrap: { width: 1000 },
-      lineSpacing: 8,
-    });
-    this.nextBtn = new Button(this, 1100, 650, 140, 50, STORY.next, () => this.onNext(), 0x3b6e9b);
-    new Button(this, 1100, 20, 140, 40, STORY.skip, () => this.goBattle(), 0x555555);
-    this.input.on('pointerdown', (p: Phaser.Input.Pointer) => p.y < ART_H && this.onNext());
+
+    // 文字框：卷轴风格（左右两根竖轴），浮在画面下方；没有卷轴素材时是奶油色圆角框
+    const panel = scrollPanel(this, BOX.x - 20, BOX.y - 6, BOX.w + 40, BOX.h + 12);
+    this.textObj = bodyText(this, BOX.x + 56, BOX.y + 34, '', 22, BOX.w - 280);
+    this.nextBtn = new Button(this, BOX.x + BOX.w - 200, BOX.y + BOX.h - 84, 160, 60, STORY.next, () => this.onNext(), THEME.orange);
+    this.box = this.add.container(0, 0, [panel, this.textObj, this.nextBtn]).setDepth(10);
+
+    this.skipBtn = new Button(this, 0, 20, 140, 48, STORY.skip, () => this.goNext(), THEME.grey).setDepth(11);
+    this.placeEdges();
+
+    // 点画面任意处（文字框以外）也能翻页
+    this.input.on('pointerdown', (p: Phaser.Input.Pointer) => p.worldY < BOX.y && this.onNext());
     this.input.keyboard?.on('keydown-SPACE', () => this.onNext());
-    this.show();
+
+    // 开场：先只露出画面，文字框稍后从下方浮上来
+    this.box.setY(220).setAlpha(0);
+    this.show(false);
+    this.time.delayedCall(900, () => {
+      this.tweens.add({ targets: this.box, y: 0, alpha: 1, duration: 600, ease: 'Back.out', onComplete: () => this.startTyping() });
+    });
+  }
+
+  private placeEdges() {
+    this.skipBtn?.setX(screenEdges(this).right - 140 - 24);
   }
 
   // ───────── 给各页插画用的小工具 ─────────
@@ -232,72 +264,157 @@ export class StoryScene extends Phaser.Scene {
 
   // ───────── 翻页与逐字显示 ─────────
 
-  private show() {
+  /** 显示当前页。typeNow=false 时只换画面，打字由调用方稍后开始（开场文字框浮出动画用） */
+  private show(typeNow = true) {
+    const p = PANELS[this.index];
+    const wanted = p.image ? ([] as ImageKey[]).concat(p.image) : [];
+    // 有图没加载到（网络慢或偶发失败）：当场补加载，加载完再显示；补不回来就用占位图
+    const missing = wanted.filter((k) => !this.textures.exists(storyKey(k)));
+    if (missing.length && !this.loadingMissing) {
+      this.loadingMissing = true;
+      for (const k of missing) this.load.image(storyKey(k), STORY_IMAGES[k]);
+      this.load.once('complete', () => {
+        this.loadingMissing = false;
+        this.show(typeNow);
+      });
+      this.load.start();
+      return;
+    }
+
     this.layer.each((o: Phaser.GameObjects.GameObject) => this.tweens.killTweensOf(o));
     this.layer.removeAll(true);
-    const p = PANELS[this.index];
     this.slideTimer?.remove();
-    const keys = (p.image ? ([] as ImageKey[]).concat(p.image) : []).map((k) => `story-${k}`).filter((k) => this.textures.exists(k));
+    this.slideTimer = undefined;
+    this.sfx?.stop();
+    playBgm(this, p.bgm);
+    this.slides = [];
+    this.slideIndex = 0;
+
+    const keys = wanted.filter((k) => this.textures.exists(storyKey(k)));
     if (keys.length) {
-      const imgs = keys.map((k, i) => {
-        const img = this.add.image(640, ART_H / 2, k).setAlpha(i === 0 ? 1 : 0);
-        const base = Math.max(1280 / img.width, ART_H / img.height);
+      const edges = screenEdges(this);
+      const vw = edges.right - edges.left;
+      this.slides = keys.map((k, i) => {
+        // 图片铺满屏幕宽度，从顶部开始；下方被文字框盖住一部分
+        const img = this.add.image(640, edges.top, storyKey(k)).setOrigin(0.5, 0).setAlpha(i === 0 ? 1 : 0);
+        const base = Math.max(vw / img.width, (BOX.y + 40 - edges.top) / img.height);
         img.setScale(base);
-        // 镜头缓慢推进，让静态图有点生气
-        this.tweens.add({ targets: img, scale: base * 1.05, duration: 9000, ease: 'Sine.out' });
+        if (i === 0) this.tweens.add({ targets: img, scale: base * 1.05, duration: 9000, ease: 'Sine.out' });
         this.layer.add(img);
-        return img;
+        return { img, key: k };
       });
-      // 多张图：依次淡入
-      let next = 1;
-      if (imgs.length > 1) {
-        this.slideTimer = this.time.addEvent({
-          delay: SLIDE_HOLD,
-          repeat: imgs.length - 2,
-          callback: () => this.tweens.add({ targets: imgs[next++], alpha: 1, duration: SLIDE_FADE }),
-        });
-      }
+      this.playSoundFor(keys[0]);
     } else {
       p.draw(this, currentSkin());
     }
-    // 翻页时停掉上一页的声音
-    this.sound.stopAll();
-    if (p.sound && this.cache.audio.exists(`story-${p.sound}`)) this.sound.play(`story-${p.sound}`);
     this.layer.setAlpha(0);
     this.tweens.add({ targets: this.layer, alpha: 1, duration: 400 });
-    this.titleObj.setText(`${p.title}  ${this.index + 1}/${PANELS.length}`);
-    this.full = p.text;
+
+    // 引导角色「系统」：翻页时收起，到指定的那段文字再飘进来
+    this.guide?.obj.destroy();
+    this.guide = undefined;
+    if (p.systemAtPart === 0) this.showSystem();
+
+    this.tag?.destroy();
+    this.tag = p.speaker
+      ? pill(this, BOX.x + 80, BOX.y, p.title, THEME.blue, 20)
+      : pill(this, BOX.x + 110, BOX.y, `${p.title}  ${this.index + 1}/${PANELS.length}`, THEME.orange, 18);
+    this.box.add(this.tag);
+    this.nextBtn.setLabel(this.index === PANELS.length - 1 ? STORY.finish : STORY.next);
+    this.parts = ([] as string[]).concat(p.text);
+    this.partIndex = 0;
+    this.full = this.parts[0];
     this.shown = 0;
     this.textObj.setText('');
     this.typing?.remove();
+    if (p.entrance) {
+      // 文字框沉下去，再和角色一起浮上来
+      this.box.setY(220).setAlpha(0);
+      this.time.delayedCall(500, () => {
+        this.tweens.add({ targets: this.box, y: 0, alpha: 1, duration: 600, ease: 'Back.out', onComplete: () => this.startTyping() });
+      });
+    } else if (typeNow) this.startTyping();
+  }
+
+  /** 系统从右侧飘进来，停在对话框右上方 */
+  private showSystem() {
+    if (this.guide) return;
+    this.guide = showGuide(this, 1060, 410, { from: 'right', height: 270, depth: 9 });
+  }
+
+  private startTyping() {
+    this.typing?.remove();
     this.typing = this.time.addEvent({
-      delay: 35,
+      delay: 40,
       loop: true,
       callback: () => {
         this.shown++;
         this.textObj.setText(this.full.slice(0, this.shown));
-        if (this.shown >= this.full.length) this.typing?.remove();
+        if (this.shown >= this.full.length) this.onTextDone();
       },
     });
-    this.nextBtn.setLabel(this.index === PANELS.length - 1 ? STORY.finish : STORY.next);
+  }
+
+  /** 字打完：如果这一页还有下一张图，稍等一下再淡入 */
+  private onTextDone() {
+    this.typing?.remove();
+    if (this.slideIndex + 1 >= this.slides.length || this.slideTimer) return;
+    this.slideTimer = this.time.delayedCall(SLIDE_AFTER_TEXT, () => this.nextSlide());
+  }
+
+  private nextSlide() {
+    this.slideTimer = undefined;
+    const s = this.slides[++this.slideIndex];
+    if (!s) return;
+    this.tweens.add({ targets: s.img, alpha: 1, duration: SLIDE_FADE });
+    this.tweens.add({ targets: s.img, scale: s.img.scale * 1.05, duration: 9000, ease: 'Sine.out' });
+    this.playSoundFor(s.key);
+    if (this.slideIndex + 1 < this.slides.length) this.slideTimer = this.time.delayedCall(SLIDE_FADE + 1800, () => this.nextSlide());
+  }
+
+  private playSoundFor(k: ImageKey) {
+    const snd = PANELS[this.index].sound;
+    if (!snd || snd.on !== k || !this.cache.audio.exists(storyKey(snd.key))) return;
+    this.sfx?.destroy();
+    this.sfx = this.sound.add(storyKey(snd.key));
+    this.sfx.play();
+    duckBgm(this, ((this.sfx as Phaser.Sound.WebAudioSound).duration || 4) * 1000);
   }
 
   private onNext() {
+    if (this.loadingMissing || this.box.alpha < 1) return;
     // 文字还没打完时，第一下点击先显示全文
     if (this.shown < this.full.length) {
       this.shown = this.full.length;
-      this.typing?.remove();
       this.textObj.setText(this.full);
+      this.onTextDone();
+      return;
+    }
+    // 这一页还有图没出来（比如全家福），先把图放出来，不急着翻页
+    if (this.slideIndex + 1 < this.slides.length) {
+      this.slideTimer?.remove();
+      this.nextSlide();
+      return;
+    }
+    // 这一页还有下一段文字：换段，不翻页
+    if (this.partIndex + 1 < this.parts.length) {
+      this.partIndex++;
+      this.full = this.parts[this.partIndex];
+      this.shown = 0;
+      this.textObj.setText('');
+      if (PANELS[this.index].systemAtPart === this.partIndex) this.showSystem();
+      this.startTyping();
       return;
     }
     this.index++;
-    if (this.index >= PANELS.length) return this.goBattle();
+    if (this.index >= PANELS.length) return this.goNext();
     this.show();
   }
 
-  private goBattle() {
+  private goNext() {
     this.typing?.remove();
-    this.sound.stopAll();
+    this.slideTimer?.remove();
+    this.sfx?.stop();
     this.scene.start('Stage1');
   }
 }

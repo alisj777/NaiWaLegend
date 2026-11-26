@@ -4,25 +4,47 @@
   <meta charset="UTF-8" />
   <!-- 手机端：禁止双指缩放，内容铺进刘海屏安全区 -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <!-- "添加到主屏幕"后从桌面图标打开：没有浏览器地址栏和工具栏，画面全屏铺满 -->
   <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="奶娃传奇" />
+  <link rel="apple-touch-icon" href="icons/icon-180.png" />
+  <link rel="manifest" href="manifest.webmanifest" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="screen-orientation" content="landscape" />
   <title>奶蛙家族</title>
   <style>
     html, body { margin: 0; height: 100%; background: #1d2330; overflow: hidden; overscroll-behavior: none; }
     body { touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
-    #game { position: fixed; inset: 0; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); box-sizing: border-box; }
+    /* 画布铺满整个屏幕（包括刘海区域）；设计区域在正中，刘海只会盖住两侧补出来的背景 */
+    #game { position: fixed; inset: 0; }
+    /* 标题字体：阿里妈妈方圆体（免费商用，由 tools/subset_font.py 瘦身），只用于标题；正文用系统字体 */
+    @font-face { font-family: "TitleFont"; src: url("fonts/title.ttf") format("truetype"); font-display: block; }
+    /* 启动画面：游戏引擎下载期间显示（此时还算不出百分比，用来回滑动的进度条），引擎启动后由 BootScene 接手显示真实百分比 */
+    #splash { position: fixed; inset: 0; z-index: 5; background: #1d2330; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 28px;
+      font-family: "PingFang SC", "Microsoft YaHei", sans-serif; }
+    #splash .title { color: #fff27a; font-size: 44px; font-weight: 600; text-shadow: 0 3px 0 #3a2a10; }
+    #splash .track { width: min(440px, 70vw); height: 18px; border-radius: 9px; background: rgba(255,255,255,0.12); overflow: hidden; }
+    #splash .bar { width: 35%; height: 100%; border-radius: 9px; background: #f0a860; animation: slide 1.2s ease-in-out infinite; }
+    #splash .tip { color: #9aa4b8; font-size: 15px; }
+    @keyframes slide { 0% { transform: translateX(-100%); } 100% { transform: translateX(290%); } }
     /* 竖屏时提示转成横屏 */
     #rotate { display: none; position: fixed; inset: 0; z-index: 10; background: #1d2330; color: #fff27a;
       font: 20px "PingFang SC", "Microsoft YaHei", sans-serif; align-items: center; justify-content: center; flex-direction: column; gap: 16px; text-align: center; }
     #rotate .phone { width: 46px; height: 80px; border: 4px solid #fff27a; border-radius: 10px; animation: turn 1.6s ease-in-out infinite; }
     @keyframes turn { 0%, 30% { transform: rotate(0); } 60%, 100% { transform: rotate(-90deg); } }
+    #rotate .sub { color: #c8cfdc; font-size: 15px; line-height: 1.8; padding: 0 28px; }
     @media (orientation: portrait) and (pointer: coarse) { #rotate { display: flex; } }
   </style>
 </head>
 <body>
   <div id="game"></div>
-  <div id="rotate"><div class="phone"></div>请把手机横过来玩</div>
+  <div id="splash"><div class="title">奶蛙家族</div><div class="track"><div class="bar"></div></div><div class="tip">正在加载游戏引擎…</div></div>
+  <div id="rotate">
+    <div class="phone"></div>
+    <div>请把手机横过来玩</div>
+    <div class="sub">画面没有跟着转？<br>iPhone：从屏幕右上角往下滑打开控制中心，关闭「竖排方向锁定」🔒<br>安卓：在下拉菜单里打开「自动旋转」</div>
+  </div>
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

@@ -31,11 +31,12 @@ export class VirtualJoystick {
     this.draw(false);
 
     scene.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
-      if (this.pointerId !== -1 || !this.enabled() || !this.zone.contains(p.x, p.y)) return;
+      // 用世界坐标：全屏适配后镜头会平移，屏幕坐标和场景坐标不一致
+      if (this.pointerId !== -1 || !this.enabled() || !this.zone.contains(p.worldX, p.worldY)) return;
       this.pointerId = p.id;
       // 底座跟着手指落点走，但不能贴出屏幕
-      this.cx = Phaser.Math.Clamp(p.x, this.zone.x + radius, this.zone.right - radius * 0.4);
-      this.cy = Phaser.Math.Clamp(p.y, this.zone.y + radius * 0.4, this.zone.bottom - radius);
+      this.cx = Phaser.Math.Clamp(p.worldX, this.zone.x + radius, this.zone.right - radius * 0.4);
+      this.cy = Phaser.Math.Clamp(p.worldY, this.zone.y + radius * 0.4, this.zone.bottom - radius);
       this.move(p);
     });
     scene.input.on('pointermove', (p: Phaser.Input.Pointer) => p.id === this.pointerId && this.move(p));
@@ -43,6 +44,13 @@ export class VirtualJoystick {
     scene.input.on('pointerup', up);
     scene.input.on('pointerupoutside', up);
     scene.input.on('gameout', () => this.release());
+  }
+
+  /** 屏幕尺寸变化时重新摆放：默认位置和可触发区域 */
+  setPlacement(home: { x: number; y: number }, zone: Phaser.Geom.Rectangle) {
+    this.home = home;
+    this.zone = zone;
+    if (this.pointerId === -1) this.release();
   }
 
   release() {
@@ -54,8 +62,8 @@ export class VirtualJoystick {
   }
 
   private move(p: Phaser.Input.Pointer) {
-    let dx = p.x - this.cx;
-    let dy = p.y - this.cy;
+    let dx = p.worldX - this.cx;
+    let dy = p.worldY - this.cy;
     const len = Math.hypot(dx, dy);
     const max = this.radius * 0.7;
     if (len > max) (dx *= max / len), (dy *= max / len);

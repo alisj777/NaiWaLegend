@@ -2,7 +2,10 @@ import Phaser from 'phaser';
 
 /** 所有形象用代码绘制的原创几何图形，美术风格定下来后替换这里即可。 */
 
-export const FONT = '"PingFang SC","Microsoft YaHei","Noto Sans SC",sans-serif';
+/** 游戏字体：跟随系统，保证好认（标题的描边、渐变效果在 ui.ts 的 titleText 里做） */
+export const FONT = '"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans SC",sans-serif';
+/** 标题字体：阿里妈妈方圆体（public/fonts/title.ttf），缺字或没加载到时退回系统字体 */
+export const TITLE_FONT = `"TitleFont",${FONT}`;
 
 type G = Phaser.GameObjects.Graphics;
 

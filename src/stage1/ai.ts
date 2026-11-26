@@ -20,6 +20,8 @@ export class AIController {
   private path: number[] = [];
   private goal: Goal | null = null;
   private dug = false;
+  /** 到达目标位置的时刻（停顿 actDelay 秒后才动手） */
+  private arrivedAt = -1;
   /** 是否在抢劫模式，每隔一段时间重新决定一次，避免每次决策都掷骰子 */
   private raiding = false;
   private raidRollAt = 0;
@@ -64,6 +66,9 @@ export class AIController {
       w.setWantDir(a, null);
       if (a.moveT < 1) return;
       if (g.face) w.face(a, g.face);
+      // 到位后先停顿一下再动手
+      if (this.arrivedAt < 0) this.arrivedAt = w.t;
+      if (w.t - this.arrivedAt < C.ai.actDelay) return;
       // 空手去捡脚下的东西，但东西已经被别人拿走了：重新规划，免得误把面前自己的墙举起来
       if (g.act && !g.face && !a.carry && !w.items[here]) {
         this.goal = null;
@@ -78,6 +83,7 @@ export class AIController {
       }
       return;
     }
+    this.arrivedAt = -1;
     while (this.path.length && this.path[0] === here) this.path.shift();
     const next = this.path[0];
     if (next === undefined) return w.setWantDir(a, null);

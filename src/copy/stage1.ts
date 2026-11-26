@@ -17,17 +17,49 @@ export const STAGE1_TEXT = {
   items: { brick: '砖块', shovel: '铁锹', empty: '空瓶', tea: '奶茶', milk: '奶瓶' },
 
   // ───────── 开场提示 ─────────
+  /**
+   * 开场引导：分成几页，系统陪着讲解，最后一页点「开始」。
+   * icons 是这一页要展示的物资图片（对应 src/assets.ts 里 STAGE1_IMAGES 的名字）；
+   * diagram 是代码画的示意图：shelter = 没闭合 vs 闭合的对比，store = 瓶子放在闭合的庇护所里。
+   */
   intro: {
-    headline: '你需要使用砖块建立庇护所，\n并且尽可能多地捡瓶子！',
-    rules: [
-      '· 走到物资旁按「举起」，走回庇护所再按一次放下。举着砖块按键，会把砖放在面前那一格',
-      '· 用砖围成一圈就是闭合的庇护所：自己能穿墙进出，别人进不来。自己的砖随时可以举起来挪位置',
-      '· 别人没闭合的砖可以直接捡走；闭合的庇护所要用铁锹挖开缺口才能进去抢瓶子',
-      `· ${C.wind.firstAt} 秒后狂风来袭，会把人卷走；卷出场外，手上的物资就丢了。没闭合的庇护所也会被吹散`,
-      `· 第 ${C.spring.firstAt} 秒起灵泉每 ${C.spring.interval} 秒出现一次，举着空瓶站到旁边就能装满奶茶或奶瓶`,
-      `· ${C.duration / 60} 分钟后结算：庇护所里空瓶 ${C.score.emptyBottle} 分、满瓶 ${C.score.fullBottle} 分，最后 ${C.eliminate} 名淘汰`,
+    pages: [
+      {
+        title: '末世来临',
+        text: `末世来临，狂风即将席卷奶家村！\n建立你的庇护所，并囤好物资。\n${C.duration / 60} 分钟后按庇护所里的物资排名，最后 ${C.eliminate} 名淘汰。`,
+        icons: [] as string[],
+        diagram: undefined as 'shelter' | 'store' | undefined,
+      },
+      {
+        title: '砖块 · 盖庇护所',
+        text: '按「举起」捡砖，轻推摇杆转身，砖会放在黄色虚线框里。\n砖块必须上下左右围住，闭合了才是庇护所（出现小屋图标）。',
+        icons: [] as string[],
+        diagram: 'shelter',
+      },
+      {
+        title: '狂风',
+        text: `第 ${C.wind.firstAt} 秒起狂风来袭，会卷走奶蛋，吹散没闭合的砖墙。\n被卷出场地的奶蛋无法返回，直接出局！\n看到白色预警圈快躲开，闭合的庇护所里最安全。`,
+        icons: ['wind'],
+        diagram: undefined,
+      },
+      {
+        title: '空瓶 · 灵泉',
+        text: `举着空瓶站到灵泉旁，会装满奶茶或奶瓶。\n瓶子要放进自己闭合的庇护所里才算你的：空瓶 ${C.score.emptyBottle} 分，满瓶 ${C.score.fullBottle} 分。\n装满的瓶子会累积到后面的关卡，越攒越多！`,
+        icons: ['bottle_empty', 'spring', 'bottle_tea'],
+        diagram: 'store',
+      },
+      {
+        title: '铁锹',
+        text: '拿着铁锹对着别人的墙按「举起」，挖开缺口进去抢瓶子。\n小心！你的庇护所也可能被别人挖开。',
+        icons: ['shovel'],
+        diagram: undefined,
+      },
     ],
+    next: '下一页',
+    prev: '上一页',
     start: '开始',
+    /** 预留：看广告直接跳过本关（网页测试版点了直接过关，微信版接入激励视频广告） */
+    adSkip: '看广告跳过本关',
   },
 
   // ───────── 界面 ─────────
@@ -42,6 +74,7 @@ export const STAGE1_TEXT = {
     shelterClosed: '庇护所 ✓',
     shelterOpen: '庇护所 未闭合',
     imprisoned: '被囚禁中',
+    gone: '已出局',
     holding: (item: string) => `举着${item}`,
     emptyHand: '空手',
     myStatus: '我的状态',
@@ -73,8 +106,8 @@ export const STAGE1_TEXT = {
     filled: (item: string) => `装满${item}！`,
     stole: (thief: string, victim: string, item: string) => `${thief}从${victim}的庇护所抢走了一个${item}！`,
     dug: (who: string, victim: string) => `${who}用铁锹挖开了${victim}的庇护所！`,
-    blownOut: (who: string) => `${who}被狂风卷出了场外！`,
-    blownOutLost: (who: string, item: string) => `${who}被狂风卷出场外，${item}丢了！`,
+    /** 被卷出场外：无法返回，直接出局 */
+    blownOut: (who: string) => `${who}被狂风卷出了场外，无法返回，出局了！`,
     blownAway: (who: string) => `${who}被狂风卷到了别处！`,
     needShovel: '这是闭合的庇护所，要用铁锹才能挖开',
     // 彩蛋：囚禁
@@ -90,9 +123,13 @@ export const STAGE1_TEXT = {
   result: {
     pass: '晋级！',
     fail: '你被淘汰了',
+    /** 被狂风卷出场外时的结算标题 */
+    blownAway: '你被狂风卷走了',
     row: (rank: number, name: string, score: number, out: boolean) => `${rank}. ${name}　${score} 分　${out ? '淘汰' : '晋级'}`,
     carry: (tea: number, milk: number) => `带进下一关：奶茶 ×${tea}　奶瓶 ×${milk}`,
     next: '进入下一关',
+    /** 下一章还没做好时显示 */
+    comingSoon: '下一章 敬请期待',
     retry: '重新挑战',
     menu: '返回菜单',
   },

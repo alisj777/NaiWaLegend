@@ -1,2 +1,5 @@
 node_modules
 dist
+
+# 原始字体文件不入库（授权一般允许使用，不一定允许分发原文件）；游戏用的是 tools/subset_font.py 生成的 public/fonts/title.ttf
+art/reference/menu/*.ttf

@@ -22,6 +22,7 @@ OUT = ROOT / "public" / "assets"
 #   参数 tol：判定为背景的容差，越大去得越狠（能去掉浅灰色影子，但太大会吃掉物体的浅色边缘）
 #   参数 glass：玻璃等透明物体，物体内部透出的白底也变透明
 #   luma = 黑底上的白色半透明效果（如狂风）：越亮越不透明，黑色完全透明
+#   glow = 黑底上的彩色半透明发光体（如系统幽灵）：保留颜色，越亮越不透明
 # 源图已经是透明底 PNG 时，自动只裁边缩放，不再去底；黑底图也会自动按黑色去底
 JOBS = [
     # 第一关 · 狂风夜
@@ -45,12 +46,101 @@ JOBS = [
     ("intro/dying_frog.png", "story/dying.jpg", "cover", 2560, 1120),
     # 菜单背景（全屏 1280×720）
     ("menu/village.png", "menu/village.jpg", "cover", 2560, 1440),
+    ("naiwa/expr_laugh.png", "menu/frog.png", "cutout", 420, 600, {"tol": 95}),
+    ("egg/front.png", "menu/egg.png", "cutout", 260, 260, {"tol": 85}),
+    # 序章开场：先只有奶家村，文字框浮出后再淡入全家福
+    ("menu/village.png", "story/village.jpg", "cover", 2560, 1120, {"anchor_y": 0.6}),
+    # 分化：保住最上面的角色头顶，底部多裁一点（反正会被文字框盖住）
+    ("intro/split.png", "story/split.jpg", "cover", 2560, 1120, {"anchor_y": 0.35}),
+    # 界面素材（卷轴、按钮、名字标签）：黑底去底，游戏里按九宫格拉伸
+    ("menu/scroll_wide.png", "ui/scroll_wide.png", "cutout", 1000, 560, {"tol": 40}),
+    ("menu/scroll_tall.png", "ui/scroll_tall.png", "cutout", 900, 620, {"tol": 40}),
+    ("menu/button.png", "ui/button.png", "cutout", 600, 220, {"tol": 40}),
+    ("menu/name_tag.png", "ui/name_tag.png", "cutout", 480, 160, {"tol": 40}),
+    # 引导角色「系统」：黑底半透明蓝色幽灵
+    ("otherCharacters/system.png", "story/system.png", "glow", 400, 400),
     # 奶蛋（第一关的 5 个奶蛋都用这一套）
     ("egg/view_front.png", "stage1/egg_down.png", "cutout", 64, 72, {"tol": 75}),
     ("egg/view_back.png", "stage1/egg_up.png", "cutout", 64, 72, {"tol": 75}),
     ("egg/view_left.png", "stage1/egg_left.png", "cutout", 64, 72, {"tol": 75}),
     ("egg/view_right.png", "stage1/egg_right.png", "cutout", 64, 72, {"tol": 75}),
 ]
+
+
+# 音频：music/ 是原始素材库，转码（压缩、统一文件名）后放到 public/audio/
+#   (源文件, 输出文件, 码率)：背景音乐 96k 足够，音效 128k
+MUSIC = ROOT / "music"
+AUDIO_JOBS = [
+    ("intro：欢快25s.mp3", "bgm_happy.mp3", "96k"),
+    ("intro 末世来临.mp3", "bgm_doom.mp3", "96k"),
+    ("intro：重生.mp3", "bgm_rebirth.mp3", "96k"),
+    ("chapter1.mp3", "bgm_chapter1.mp3", "96k"),
+    ("多人大笑.mp3", "sfx_laugh_group.mp3", "128k"),
+]
+
+
+def convert_audio():
+    import subprocess
+
+    out_dir = ROOT / "public" / "audio"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for src, dst, rate in AUDIO_JOBS:
+        s = MUSIC / src
+        if not s.exists():
+            print(f"跳过（找不到源文件）：music/{src}")
+            continue
+        d = out_dir / dst
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(s), "-vn", "-ac", "2", "-b:a", rate, str(d)], check=True)
+        print(f"audio/{dst:24s} {d.stat().st_size // 1024} KB（原 {s.stat().st_size // 1024} KB）")
+
+
+# 动画：黑底视频 → 去黑底的序列帧图（spritesheet），游戏里循环播放
+#   (源视频, 输出图, 每秒取几帧, 每帧边长)。每帧大小固定，填进 src/assets.ts 的 SPRITESHEETS
+SHEET_JOBS = [
+    ("otherCharacters/system_anim.mp4", "story/system_anim.png", 10, 200),
+]
+
+
+def make_sheets():
+    import subprocess
+    import tempfile
+
+    for src, dst, fps, size in SHEET_JOBS:
+        s = REF / src
+        if not s.exists():
+            print(f"跳过（找不到源文件）：{src}")
+            continue
+        with tempfile.TemporaryDirectory() as tmp:
+            subprocess.run(["ffmpeg", "-v", "error", "-i", str(s), "-vf", f"fps={fps}", f"{tmp}/f%03d.png"], check=True)
+            frames = [glow_full(Image.open(p)) for p in sorted(Path(tmp).glob("f*.png"))]
+        # 所有帧共用一个裁剪框（取并集），保证角色在每帧里位置一致、不会抖
+        box = None
+        for f in frames:
+            b = f.getchannel("A").point(lambda a: 255 if a > 24 else 0).getbbox()
+            if b:
+                box = b if box is None else (min(box[0], b[0]), min(box[1], b[1]), max(box[2], b[2]), max(box[3], b[3]))
+        cols = 8
+        rows = (len(frames) + cols - 1) // cols
+        sheet = Image.new("RGBA", (cols * size, rows * size))
+        for i, f in enumerate(frames):
+            c = f.crop(box)
+            c.thumbnail((size, size), Image.LANCZOS)
+            cell = Image.new("RGBA", (size, size))
+            cell.paste(c, ((size - c.width) // 2, (size - c.height) // 2))
+            sheet.paste(cell, ((i % cols) * size, (i // cols) * size))
+        d = OUT / dst
+        d.parent.mkdir(parents=True, exist_ok=True)
+        # 压到 256 色：体积约降到原来的 1/6，缩小显示时看不出差别
+        sheet.quantize(colors=256, method=Image.Quantize.FASTOCTREE, dither=Image.Dither.FLOYDSTEINBERG).save(d, optimize=True)
+        print(f"{dst:28s} {len(frames)} 帧，每帧 {size}×{size}  {d.stat().st_size // 1024} KB")
+
+
+def glow_full(img: Image.Image) -> Image.Image:
+    """和 glow 一样，但不裁边（序列帧要统一裁剪）"""
+    rgb = np.asarray(img.convert("RGB")).astype(np.float32)
+    a = np.clip((rgb.max(axis=2) - 12) / (255 - 12) * 1.25, 0, 1)
+    col = np.clip(rgb / np.maximum(a[..., None], 1e-3), 0, 255)
+    return Image.fromarray(np.dstack([col, a * 255]).astype(np.uint8), "RGBA")
 
 
 def has_transparency(img: Image.Image) -> bool:
@@ -74,6 +164,15 @@ def luma(img: Image.Image) -> Image.Image:
     lum = rgb.max(axis=2)
     alpha = np.clip((lum - 20) / (235 - 20), 0, 1) * 255
     out = np.dstack([np.full_like(lum, 250), np.full_like(lum, 252), np.full_like(lum, 255), alpha]).astype(np.uint8)
+    return trim(Image.fromarray(out, "RGBA"))
+
+
+def glow(img: Image.Image) -> Image.Image:
+    """黑底彩色发光体：亮度当透明度，颜色按透明度还原，叠在任何背景上都是半透明发光的样子"""
+    rgb = np.asarray(img.convert("RGB")).astype(np.float32)
+    a = np.clip((rgb.max(axis=2) - 12) / (255 - 12) * 1.25, 0, 1)
+    col = np.clip(rgb / np.maximum(a[..., None], 1e-3), 0, 255)
+    out = np.dstack([col, a * 255]).astype(np.uint8)
     return trim(Image.fromarray(out, "RGBA"))
 
 
@@ -149,6 +248,11 @@ def main():
         white_bg = not has_transparency(img) and corner_brightness(img) > 200
         if mode == "cover":
             cover(img.convert("RGB"), mw, mh, **opt).save(d, quality=85, optimize=True)
+        elif mode == "glow":
+            if white_bg:
+                print(f"跳过 {dst}：源图是白底，请换成黑底或透明底的版本")
+                continue
+            fit(trim(img.convert("RGBA")) if has_transparency(img) else glow(img), mw, mh).save(d, optimize=True)
         elif mode == "luma":
             if white_bg:
                 print(f"跳过 {dst}：源图是白底，请换成黑底或透明底的版本")
@@ -166,3 +270,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+    make_sheets()
+    convert_audio()
