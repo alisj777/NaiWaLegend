@@ -9,6 +9,22 @@ import { Stage1Scene } from './scenes/Stage1Scene';
 
 import { fitGameToScreen } from './battle/layout';
 
+// 开发模式下：手机浏览器看不到控制台，把运行错误直接显示在屏幕顶部，方便截图排查（打包后的正式版不显示）
+if (import.meta.env.DEV) {
+  const show = (msg: string) => {
+    let box = document.getElementById('dev-error');
+    if (!box) {
+      box = document.createElement('pre');
+      box.id = 'dev-error';
+      box.style.cssText = 'position:fixed;left:0;right:0;top:0;z-index:99;margin:0;padding:8px 12px;max-height:40vh;overflow:auto;background:rgba(160,20,20,.92);color:#fff;font:12px/1.5 monospace;white-space:pre-wrap';
+      document.body.appendChild(box);
+    }
+    box.textContent += msg + '\n';
+  };
+  window.addEventListener('error', (e) => show(`错误：${e.message}\n  ${e.filename ?? ''}:${e.lineno ?? ''}`));
+  window.addEventListener('unhandledrejection', (e) => show(`错误：${String(e.reason?.stack ?? e.reason)}`));
+}
+
 const game = new Phaser.Game({
   type: Phaser.AUTO,
   parent: 'game',
