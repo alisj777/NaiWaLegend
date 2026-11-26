@@ -23,6 +23,11 @@ export class VirtualJoystick {
     private zone: Phaser.Geom.Rectangle,
     private radius = 72,
     private enabled: () => boolean = () => true,
+    /**
+     * 把手指位置换算成摇杆所在的坐标系。默认用 Phaser 的 worldX/worldY；
+     * 场景有多个镜头时（如第一关的场地镜头 + 界面镜头）必须传入，否则手指位置会被按错误的镜头换算。
+     */
+    private toLocal: (p: Phaser.Input.Pointer) => { x: number; y: number } = (p) => ({ x: p.worldX, y: p.worldY }),
   ) {
     this.cx = home.x;
     this.cy = home.y;
@@ -32,14 +37,29 @@ export class VirtualJoystick {
 
     scene.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
       // 用世界坐标：全屏适配后镜头会平移，屏幕坐标和场景坐标不一致
-      if (this.pointerId !== -1 || !this.enabled() || !this.zone.contains(p.worldX, p.worldY)) return;
+      const l = this.toLocal(p);
+      if (this.pointerId !== -1 || !this.enabled() || !this.zone.contains(l.x, l.y)) return;
       this.pointerId = p.id;
       // 底座跟着手指落点走，但不能贴出屏幕
-      this.cx = Phaser.Math.Clamp(p.worldX, this.zone.x + radius, this.zone.right - radius * 0.4);
-      this.cy = Phaser.Math.Clamp(p.worldY, this.zone.y + radius * 0.4, this.zone.bottom - radius);
+      this.cx = Phaser.Math.Clamp(l.x, this.zone.x + radius, this.zone.right - radius * 0.4);
+      this.cy = Phaser.Math.Clamp(l.y, this.zone.y + radius * 0.4, this.zone.bottom - radius);
       this.move(p);
     });
-    scene.input.on('pointermove', (p: Phaser.Input.Pointer) => p.id === this.pointerId && this.move(p));
+    scene.input.on('pointermove', (p: Phaser.Input.Pointer) => {
+      if (p.id !== this.pointerId) return;
+      // 防卡死：卡顿时"松手"事件可能丢失，手指其实已经离开屏幕就直接松开
+      if (!p.isDown) return this.release();
+      this.move(p);
+    });
+    // 每帧再检查一次：记录的那根手指已经不在屏幕上了，就松开（否则摇杆会一直以为被按着，后面的触摸全被忽略）
+    const check = () => {
+      if (this.pointerId === -1) return;
+      const p = scene.input.manager.pointers.find((q) => q.id === this.pointerId);
+      if (!p || !p.isDown) this.release();
+    };
+    scene.events.on(Phaser.Scenes.Events.UPDATE, check);
+    // 场景关闭（比如"重新挑战"）时移除，否则旧摇杆的检查会留下来、操作已经销毁的图形
+    scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => scene.events.off(Phaser.Scenes.Events.UPDATE, check));
     const up = (p: Phaser.Input.Pointer) => p.id === this.pointerId && this.release();
     scene.input.on('pointerup', up);
     scene.input.on('pointerupoutside', up);
@@ -62,8 +82,9 @@ export class VirtualJoystick {
   }
 
   private move(p: Phaser.Input.Pointer) {
-    let dx = p.worldX - this.cx;
-    let dy = p.worldY - this.cy;
+    const l = this.toLocal(p);
+    let dx = l.x - this.cx;
+    let dy = l.y - this.cy;
     const len = Math.hypot(dx, dy);
     const max = this.radius * 0.7;
     if (len > max) (dx *= max / len), (dy *= max / len);

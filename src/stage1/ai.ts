@@ -166,7 +166,7 @@ export class AIController {
       if (blocked.length) goal = best(blocked.map((i) => ({ stand: i, act: true })));
       if (!goal && missing.length) goal = best(itemGoals((i) => w.items[i]!.kind === 'brick' && !this.interiorTiles.includes(i)));
       // 地上没砖了：去拆别人没闭合的墙
-      if (!goal && missing.length) goal = best(this.wallGoals((o) => o !== a.id && !w.closed.has(o), () => true));
+      if (!goal && missing.length) goal = best(this.wallGoals((o, i) => o !== a.id && !w.isWallClosed(i), () => true));
       if (w.t >= this.raidRollAt) {
         this.raidRollAt = w.t + 8;
         this.raiding = Math.random() < C.ai.raidChance;
@@ -182,11 +182,11 @@ export class AIController {
   }
 
   /** 站在墙旁边、面朝墙按键的所有位置。owner 过滤墙的主人，standOk 过滤站的位置 */
-  private wallGoals(owner: (o: number) => boolean, standOk: (stand: number) => boolean): Goal[] {
+  private wallGoals(owner: (o: number, i: number) => boolean, standOk: (stand: number) => boolean): Goal[] {
     const w = this.w;
     const out: Goal[] = [];
     w.walls.forEach((o, i) => {
-      if (o === -1 || !owner(o)) return;
+      if (o === -1 || !owner(o, i)) return;
       const x = i % w.cols;
       const y = (i / w.cols) | 0;
       for (const d of DIR_LIST) {

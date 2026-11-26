@@ -127,6 +127,9 @@ export const STAGE1_TEXT = {
     blownAway: '你被狂风卷走了',
     row: (rank: number, name: string, score: number, out: boolean) => `${rank}. ${name}　${score} 分　${out ? '淘汰' : '晋级'}`,
     carry: (tea: number, milk: number) => `带进下一关：奶茶 ×${tea}　奶瓶 ×${milk}`,
+    /** 过关时：这一关所有庇护所里存下的物资，以及累计到现在的总数（会带到后面的关卡） */
+    collected: (empty: number, tea: number, milk: number) => `本关存下：空瓶 ${empty}　奶茶 ${tea}　奶瓶 ${milk}`,
+    total: (empty: number, tea: number, milk: number) => `累计物资：空瓶 ${empty}　奶茶 ${tea}　奶瓶 ${milk}`,
     next: '进入下一关',
     /** 下一章还没做好时显示 */
     comingSoon: '下一章 敬请期待',

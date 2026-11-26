@@ -36,6 +36,8 @@ JOBS = [
     ("chapter1/shovel.png", "stage1/shovel.png", "cutout", 48, 60, {"tol": 75}),
     ("chapter1/spring.png", "stage1/spring.png", "cutout", 192, 192),
     ("chapter1/shelter_hut.png", "stage1/shelter.png", "cutout", 96, 96, {"tol": 50}),
+    # 灵泉方向箭头：黑底黄色箭头，按亮度变透明，尾巴自然渐隐
+    ("chapter1/arrow.png", "stage1/arrow.png", "glow", 300, 160),
     # 序章（插画区 1280×560，输出 2 倍）
     # 全家福：保住奶蛙头顶和最下面一排奶蛋，只裁掉天空
     ("intro/family_photo.png", "story/family.jpg", "cover", 2560, 1120, {"anchor_y": 1.0}),

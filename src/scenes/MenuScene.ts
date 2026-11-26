@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { MENU_TEXT as TX } from '../copy/menu';
 import { Button, THEME, outlineText, scrollPanel, titleText } from '../battle/ui';
-import { coverImage, fitScreen, fullBg, screenEdges } from '../battle/layout';
+import { coverImage, fitScreen, fullBg, matchPageColorToImage, screenEdges } from '../battle/layout';
 import { platform } from '../platform';
 import { playBgm } from '../battle/music';
 
@@ -21,7 +21,10 @@ export class MenuScene extends Phaser.Scene {
     fitScreen(this, () => this.placeEdges());
     fullBg(this, 0x9ccf7a);
     playBgm(this, 'happy');
-    if (this.textures.exists('menu-village')) coverImage(this, 'menu-village');
+    if (this.textures.exists('menu-village')) {
+      coverImage(this, 'menu-village');
+      matchPageColorToImage(this, 'menu-village');
+    }
     // 底部一层淡淡的暖色渐变，让按钮区更突出，背景仍然明亮
     this.add.graphics().fillGradientStyle(0x5a3a22, 0x5a3a22, 0x5a3a22, 0x5a3a22, 0, 0, 0.4, 0.4).fillRect(-1280, 300, 3840, 800);
 

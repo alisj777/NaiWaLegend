@@ -4,25 +4,27 @@ import { STAGE1_TEXT as TX } from '../copy/stage1';
 import { currentSkin } from '../skins';
 import * as art from '../battle/art';
 import { Button, THEME, bodyText, creamPanel, label, outlineText, pill, scrollPanel, titleText } from '../battle/ui';
-import { fitScreen, fullBg, screenEdges } from '../battle/layout';
+import { fitScreen, fullBg, screenEdges, screenExtra } from '../battle/layout';
 import { playBgm } from '../battle/music';
 import { showGuide } from '../battle/guide';
 import { platform } from '../platform';
+import { addToStash } from '../progress';
 import { RoundButton, VirtualJoystick } from '../battle/touch';
 import { AIController } from '../stage1/ai';
 import { Actor, Dir, DIRS, Item, World, itemName } from '../stage1/world';
 import { Stage1ImageKey, stage1Key } from '../assets';
 
 /*
- * 布局：场地铺满整个屏幕（按可见区域算出每格边长），文字信息放在画面四角：
+ * 布局：场地放大（每格 C.grid.viewTile 像素），比屏幕大，镜头跟着你移动（场地镜头）；
+ * 文字信息、摇杆、按键固定在屏幕上（界面镜头），放在画面四角：
  *   左上：关卡名 + 剩余时间      右上：物资排名
  *   左下：我的状态（摇杆浮在左半屏）  右下：举起键
  *   顶部正中：狂风 / 灵泉倒计时；底部正中：提示消息
- * 面板和按键都半透明，压在场地上也看得见底下的东西。
+ * 场地上的东西都要用 this.W() 放进场地层，否则只会出现在界面镜头里。
  */
-let T: number = C.grid.tile;
-let OX = 0;
-let OY = 0;
+let T: number = C.grid.viewTile;
+const OX = 0;
+const OY = 0;
 let FW = C.grid.cols * T;
 let FH = C.grid.rows * T;
 /** 当前每格边长（给需要默认参数的函数用） */
@@ -30,16 +32,17 @@ const TILE = () => T;
 /** 相对原来 32 像素一格的缩放倍数，角色和物资的大小都按它放大 */
 const S = () => T / 32;
 
-/** 场地铺满屏幕：按可见区域算每格边长，场地居中 */
-function layoutField(scene: Phaser.Scene) {
-  const e = screenEdges(scene);
-  const vw = e.right - e.left;
-  const vh = e.bottom - e.top;
-  T = Math.floor(Math.min(vw / C.grid.cols, vh / C.grid.rows));
+/** 场地大小：每格固定边长，场地放在场地层的 (0, 0) */
+function layoutField() {
+  T = C.grid.viewTile;
   FW = C.grid.cols * T;
   FH = C.grid.rows * T;
-  OX = e.left + (vw - FW) / 2;
-  OY = e.top + (vh - FH) / 2;
+}
+
+/** 把一个对象（以及容器里的所有子对象）重新设为"所有镜头可见"，放进场地层后用 */
+function clearCameraFilter(obj: Phaser.GameObjects.GameObject) {
+  obj.cameraFilter = 0;
+  if (obj instanceof Phaser.GameObjects.Container) obj.list.forEach(clearCameraFilter);
 }
 
 /** 摇杆半径 */
@@ -105,6 +108,39 @@ function drawWall(g: Phaser.GameObjects.Graphics, x: number, y: number, closed: 
   }
 }
 
+/**
+ * 开发模式：记录一帧里各部分花了多少毫秒。某一帧超过 50ms（明显卡顿）时，在屏幕顶部显示明细，
+ * 并标出是不是在狂风期间，方便手机上截图排查。正式版不运行。
+ */
+class FrameProfiler {
+  private t0 = performance.now();
+  private last = this.t0;
+  private parts: string[] = [];
+  constructor(private dtMs: number) {}
+  mark(name: string) {
+    const now = performance.now();
+    this.parts.push(`${name} ${(now - this.last).toFixed(1)}`);
+    this.last = now;
+  }
+  /** 上次往网页写诊断信息的时间：最多每秒写一次，避免卡顿时每帧改网页、越写越卡 */
+  static lastWrite = 0;
+  done(gameT: number, windy: boolean) {
+    if (this.dtMs < 100) return;
+    const now = performance.now();
+    if (now - FrameProfiler.lastWrite < 1000) return;
+    FrameProfiler.lastWrite = now;
+    let el = document.getElementById('dev-hitch');
+    if (!el) {
+      el = document.createElement('pre');
+      el.id = 'dev-hitch';
+      el.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);top:0;z-index:98;margin:0;padding:4px 8px;background:rgba(0,0,0,.7);color:#ff0;font:11px/1.4 monospace;pointer-events:none;max-height:30vh;overflow:hidden';
+      document.body.appendChild(el);
+    }
+    const line = `卡顿 ${this.dtMs.toFixed(0)}ms @${gameT.toFixed(1)}s${windy ? ' [狂风中]' : ''} | ${this.parts.join(' | ')} (ms)`;
+    el.textContent = (line + '\n' + el.textContent).split('\n').slice(0, 6).join('\n');
+  }
+}
+
 /** 黄色虚线框（瞄准框），虚线会慢慢流动，提示"砖会放在这里" */
 function dashedRect(g: Phaser.GameObjects.Graphics, x: number, y: number, w: number, h: number, color: number, alpha: number, lw: number, t: number) {
   const dash = Math.max(5, w / 6);
@@ -162,7 +198,8 @@ export class Stage1Scene extends Phaser.Scene {
   private boardRows: Phaser.GameObjects.Text[] = [];
   private actionBtn!: RoundButton;
   private springText!: Phaser.GameObjects.Text;
-  private shelterTags = new Map<number, Phaser.GameObjects.Container>();
+  /** 庇护所图标：每个闭合区域一个（一个人可以有多个庇护所），按"主人:区域左上角格子"区分 */
+  private shelterTags = new Map<string, Phaser.GameObjects.Container>();
   /** 图片对象池：地上的物资按格子编号复用，避免每帧新建 */
   private itemSprites = new Map<number, Phaser.GameObjects.Image>();
   private springImg: Phaser.GameObjects.Image | null = null;
@@ -171,9 +208,14 @@ export class Stage1Scene extends Phaser.Scene {
   /** 画在砖块上面的一层（自己的墙的白框、灵泉的颜色提示） */
   private over!: Phaser.GameObjects.Graphics;
   private toasts: Phaser.GameObjects.Text[] = [];
-  private shook = new Set<number>();
+  private toastAt = new Map<Phaser.GameObjects.Text, number>();
+  /** 灵泉方向箭头（灵泉在屏幕外时出现在屏幕边缘） */
+  private springArrow?: Phaser.GameObjects.Image | Phaser.GameObjects.Graphics;
 
   private stick!: VirtualJoystick;
+  /** 场地层（场地镜头拍它，跟着你移动）和界面镜头（固定在屏幕上，拍四角信息、摇杆、按键、弹窗） */
+  private worldLayer!: Phaser.GameObjects.Layer;
+  private uiCam!: Phaser.Cameras.Scene2D.Camera;
   private slotGfx: Phaser.GameObjects.Graphics[] = [];
   private keys!: Record<string, Phaser.Input.Keyboard.Key>;
 
@@ -192,16 +234,40 @@ export class Stage1Scene extends Phaser.Scene {
     this.springImg = null;
     this.gustImgs = new Map();
     this.toasts = [];
-    this.shook = new Set();
+    this.toastAt = new Map();
+    this.springArrow = undefined;
   }
 
   private has(k: ImgKey) {
     return this.textures.exists(K(k));
   }
 
+  /** 放进场地层：场地镜头拍得到、界面镜头拍不到 */
+  private W<O extends Phaser.GameObjects.GameObject>(obj: O): O {
+    this.worldLayer.add(obj);
+    clearCameraFilter(obj);
+    return obj;
+  }
+
+  /**
+   * 两个镜头：场地镜头（main）跟着你；界面镜头（uiCam）固定，坐标和其他场景一样按 1280×720 设计区域摆。
+   * 新建的对象默认只给界面镜头拍；场地上的东西用 this.W() 放进场地层。
+   */
+  private setupCameras() {
+    this.worldLayer = this.add.layer();
+    this.uiCam = this.cameras.add(0, 0, this.scale.width, this.scale.height);
+    this.uiCam.ignore(this.worldLayer);
+    const onAdded = (obj: Phaser.GameObjects.GameObject) => {
+      if ((obj as unknown) !== this.worldLayer) this.cameras.main.ignore(obj);
+    };
+    this.events.on(Phaser.Scenes.Events.ADDED_TO_SCENE, onAdded);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.events.off(Phaser.Scenes.Events.ADDED_TO_SCENE, onAdded));
+  }
+
   create() {
+    this.setupCameras();
     fitScreen(this, () => this.placeEdges());
-    layoutField(this);
+    layoutField();
     this.eggColor = currentSkin().colors.light;
     const w = (this.world = new World());
     this.me = w.addActor({ id: 0, name: TX.playerName, human: true, cx: 13, cy: 7, speed: 1 });
@@ -213,11 +279,15 @@ export class Stage1Scene extends Phaser.Scene {
 
     playBgm(this, 'chapter1');
     this.drawStatic();
-    this.dyn = this.add.graphics().setDepth(5);
-    this.over = this.add.graphics().setDepth(7);
-    this.fx = this.add.graphics().setDepth(30);
-    this.springText = outlineText(this, 0, 0, '', Math.round(12 * S()), '#ffe08a').setOrigin(0.5, 1).setDepth(31).setVisible(false);
+    this.dyn = this.W(this.add.graphics().setDepth(5));
+    this.over = this.W(this.add.graphics().setDepth(7));
+    this.fx = this.W(this.add.graphics().setDepth(30));
+    this.springText = this.W(outlineText(this, 0, 0, '', Math.round(12 * S()), '#ffe08a').setOrigin(0.5, 1).setDepth(31).setVisible(false));
     for (const a of w.actors) this.makeView(a);
+    // 场地镜头跟着你走；到场地边缘就停住，不会拍到场地外面
+    const pad = T * 0.6;
+    this.cameras.main.setBounds(OX - pad, OY - pad, FW + pad * 2, FH + pad * 2);
+    this.cameras.main.startFollow(this.views.get(this.me.id)!.box, true, 0.12, 0.12);
     this.buildHud();
     this.bindInput();
     this.placeEdges();
@@ -226,6 +296,10 @@ export class Stage1Scene extends Phaser.Scene {
 
   /** 摇杆和举起键贴着屏幕真正的左右边缘（屏幕比 16:9 宽时往外挪，方便拇指） */
   private placeEdges() {
+    if (this.uiCam) {
+      const ex = screenExtra(this);
+      this.uiCam.setSize(this.scale.width, this.scale.height).setScroll(-ex.x, -ex.y);
+    }
     if (!this.stick || !this.actionBtn) return;
     const e = screenEdges(this);
     const midX = (e.left + e.right) / 2;
@@ -239,24 +313,22 @@ export class Stage1Scene extends Phaser.Scene {
   // ───────── 场地与 HUD ─────────
 
   private drawStatic() {
-    fullBg(this, 0x26303a);
+    this.W(fullBg(this, 0x26303a).setDepth(-10));
     // 场地：圆角草地，格线用圆角遮罩裁掉，避免角上露出直角
     const R = 18;
-    const maskShape = this.make.graphics({}, false).fillStyle(0xffffff).fillRoundedRect(OX, OY, FW, FH, R);
-    const roundMask = maskShape.createGeometryMask();
+    // 不用遮罩做圆角：手机显卡处理大面积遮罩很吃力（镜头移动时尤其卡），圆角只靠下面画的边框
     if (this.has('field')) {
-      this.add.image(OX, OY, K('field')).setOrigin(0).setDisplaySize(FW, FH).setMask(roundMask);
+      this.W(this.add.image(OX, OY, K('field')).setOrigin(0).setDisplaySize(FW, FH));
     } else {
-      this.add.graphics().fillStyle(0x5e7f4a).fillRoundedRect(OX, OY, FW, FH, R);
+      this.W(this.add.graphics().fillStyle(0x5e7f4a).fillRoundedRect(OX, OY, FW, FH, R));
     }
-    const grid = this.add.graphics();
+    const grid = this.W(this.add.graphics());
     // 有背景图时格线淡一些，只做走位参考
     if (this.has('field')) grid.lineStyle(1, 0x000000, 0.18);
     else grid.lineStyle(1, 0x547342, 0.8);
     for (let x = 1; x < C.grid.cols; x++) grid.lineBetween(OX + x * T, OY, OX + x * T, OY + FH);
     for (let y = 1; y < C.grid.rows; y++) grid.lineBetween(OX, OY + y * T, OX + FW, OY + y * T);
-    grid.setMask(roundMask);
-    this.add.graphics().lineStyle(4, 0xc89b62, 0.9).strokeRoundedRect(OX, OY, FW, FH, R);
+    this.W(this.add.graphics().lineStyle(4, 0xc89b62, 0.9).strokeRoundedRect(OX, OY, FW, FH, R));
   }
 
   private buildHud() {
@@ -302,7 +374,11 @@ export class Stage1Scene extends Phaser.Scene {
     kb.on('keydown-SPACE', () => this.running && this.world.act(this.me));
     kb.on('keydown-J', () => this.running && this.world.act(this.me));
 
-    this.stick = new VirtualJoystick(this, { x: 150, y: 490 }, new Phaser.Geom.Rectangle(0, 200, 580, 520), STICK_R, () => this.running);
+    // 摇杆在界面镜头里：手指的屏幕位置 + 界面镜头的偏移 = 摇杆坐标（不能用 worldX，它可能按跟随镜头换算）
+    this.stick = new VirtualJoystick(this, { x: 150, y: 490 }, new Phaser.Geom.Rectangle(0, 200, 580, 520), STICK_R, () => this.running, (p) => ({
+      x: p.x + this.uiCam.scrollX,
+      y: p.y + this.uiCam.scrollY,
+    }));
   }
 
   private keyDir(): Dir | null {
@@ -337,10 +413,12 @@ export class Stage1Scene extends Phaser.Scene {
     const name = label(this, 0, (bodyImg ? 16 : 12) * S(), a.name, fs, a.human ? '#1d3a66' : '#2b2b2b').setOrigin(0.5, 0).setStroke('#ffffff', 4);
     const tag = label(this, 0, -44 * S(), TX.prisonerTag, fs, '#ffffff').setOrigin(0.5).setStroke('#b03a2e', 5).setVisible(false);
     const box = this.add.container(px(a.cx), py(a.cy), [arrow, body, name, carry, carryImg, tag]).setDepth(10 + a.id);
+    this.W(box);
     if (a.human) {
       const ring = this.add.graphics();
       ring.lineStyle(2, 0xffffff, 0.95).strokeEllipse(0, 14 * S(), 30 * S(), 10 * S());
       box.addAt(ring, 0);
+      clearCameraFilter(ring);
       box.setDepth(20);
     }
     this.views.set(a.id, { box, body: bodyImg, carry, carryImg, arrow, tag, carryKey: '' });
@@ -446,8 +524,13 @@ export class Stage1Scene extends Phaser.Scene {
       const out = k >= cut;
       layer.add(bodyText(this, 640, 225 + k * 40, R.row(k + 1, r.actor.name, r.score, out), 21).setOrigin(0.5).setColor(out ? '#c0392b' : r.actor.human ? '#c0601a' : THEME.text));
     });
-    const carry = this.world.fullBottles(this.me.id);
-    if (pass && (carry.tea || carry.milk)) layer.add(bodyText(this, 640, 440, R.carry(carry.tea, carry.milk), 17).setOrigin(0.5).setColor('#b5651d'));
+    // 过关：所有庇护所里的瓶子都算你的，累积进存档，后面的关卡可以用
+    if (pass) {
+      const got = this.world.bottlesIn(this.me.id);
+      const total = addToStash(got);
+      layer.add(bodyText(this, 640, 405, R.collected(got.empty, got.tea, got.milk), 18).setOrigin(0.5).setColor('#b5651d'));
+      layer.add(bodyText(this, 640, 435, R.total(total.empty, total.tea, total.milk), 18).setOrigin(0.5).setColor('#2e7d32').setFontStyle('bold'));
+    }
     const btns: Button[] = [];
     const done = () => btns.forEach((b) => b.destroy());
     // 下一章还没做好：晋级后显示"敬请期待"；淘汰时提供看广告跳过
@@ -522,17 +605,73 @@ export class Stage1Scene extends Phaser.Scene {
 
   update(_t: number, dtMs: number) {
     const w = this.world;
+    const prof = import.meta.env.DEV ? new FrameProfiler(dtMs) : null;
     if (this.running) {
       const dt = Math.min(0.05, dtMs / 1000);
       w.setWantDir(this.me, this.stick.dir ?? this.keyDir());
       for (const ai of this.ais) ai.update(dt);
+      prof?.mark('AI');
       w.update(dt);
+      prof?.mark('规则');
       this.drainEvents();
+      prof?.mark('事件');
       // 时间到，或者你被狂风卷出场外（无法返回）都立即结算
       if ((w.ended || this.me.gone) && !this.finished) this.time.delayedCall(this.me.gone ? 1200 : 0, () => !this.finished && this.finish());
       if (this.me.gone) this.running = false;
     }
     this.render();
+    prof?.mark('绘制');
+    this.updateSpringArrow();
+    this.expireToasts();
+    prof?.done(w.t, w.gusts.length > 0);
+  }
+
+  /**
+   * 灵泉方向箭头：灵泉出现、但在屏幕外时，屏幕边缘出现黄色箭头指向它（尾巴渐隐），一闪一闪；看得见灵泉时隐藏。
+   * 箭头画在界面镜头里，位置用"场地坐标 → 屏幕 → 界面坐标"换算。
+   */
+  private updateSpringArrow() {
+    const sp = this.world.spring;
+    const cam = this.cameras.main;
+    if (!sp || !this.running) {
+      this.springArrow?.setVisible(false);
+      return;
+    }
+    const sx = px(sp.cx) - cam.scrollX;
+    const sy = py(sp.cy) - cam.scrollY;
+    const margin = T * 0.6;
+    const onScreen = sx > margin && sx < cam.width - margin && sy > margin && sy < cam.height - margin;
+    if (!this.springArrow) {
+      if (this.has('arrow')) {
+        const img = this.add.image(0, 0, K('arrow'));
+        img.setScale(150 / img.width);
+        this.springArrow = img;
+      } else {
+        // 占位：代码画的黄色箭头，尾巴逐渐透明
+        const g = this.add.graphics();
+        for (let i = 0; i < 12; i++) g.fillStyle(0xffd84a, 0.08 * (i + 1)).fillRect(-110 + i * 7, -7, 8, 14);
+        g.fillStyle(0xffd84a).fillTriangle(-26, -24, -26, 24, 22, 0);
+        g.lineStyle(3, 0x8a5a10, 0.9).strokeTriangle(-26, -24, -26, 24, 22, 0);
+        this.springArrow = g;
+      }
+      this.springArrow.setDepth(70);
+    }
+    const a = this.springArrow;
+    a.setVisible(!onScreen);
+    if (onScreen) return;
+    // 从屏幕中心指向灵泉，箭头停在屏幕边缘内侧（避开四角面板）
+    const e = screenEdges(this);
+    const ex = screenExtra(this);
+    const cx = (e.left + e.right) / 2;
+    const cy = (e.top + e.bottom) / 2;
+    const tx = sx - ex.x;
+    const ty = sy - ex.y;
+    const ang = Math.atan2(ty - cy, tx - cx);
+    const hw = (e.right - e.left) / 2 - 120;
+    const hh = (e.bottom - e.top) / 2 - 90;
+    const k = Math.min(Math.abs(hw / Math.cos(ang) || Infinity), Math.abs(hh / Math.sin(ang) || Infinity));
+    a.setPosition(cx + Math.cos(ang) * k, cy + Math.sin(ang) * k).setRotation(ang);
+    a.setAlpha(0.65 + 0.35 * Math.sin(this.time.now / 180));
   }
 
   private drainEvents() {
@@ -569,7 +708,7 @@ export class Stage1Scene extends Phaser.Scene {
       const o = w.walls[i];
       if (o === -1) continue;
       const [x, y] = tileXY(i);
-      drawWall(g, x, y, w.closed.has(o));
+      drawWall(g, x, y, w.isWallClosed(i));
       // 自己的砖加白色细框，方便认出来
       if (o === this.me.id) ov.lineStyle(Math.max(1.5, T / 20), 0xffffff, 0.85).strokeRoundedRect(x + 1, y + 1, T - 2, T - 2, T * 0.15);
     }
@@ -598,7 +737,7 @@ export class Stage1Scene extends Phaser.Scene {
       usedItem.add(i);
       let img = this.itemSprites.get(i);
       if (!img) {
-        img = this.add.image(cx, cy, K(key)).setDepth(6.5);
+        img = this.W(this.add.image(cx, cy, K(key)).setDepth(6.5));
         this.itemSprites.set(i, img);
       }
       if (img.texture.key !== K(key)) img.setTexture(K(key));
@@ -615,7 +754,7 @@ export class Stage1Scene extends Phaser.Scene {
       const cx = px(sp.cx);
       const cy = py(sp.cy);
       if (this.has('spring')) {
-        if (!this.springImg) this.springImg = this.add.image(0, 0, K('spring')).setDepth(6.4);
+        if (!this.springImg) this.springImg = this.W(this.add.image(0, 0, K('spring')).setDepth(6.4));
         this.springImg.setPosition(cx, cy).setScale(((T * 3) / this.springImg.width) * pulse).setVisible(true);
       } else {
         g.fillStyle(0x7fd3e6, 0.25).fillCircle(cx, cy, T * 1.5 * pulse);
@@ -639,14 +778,10 @@ export class Stage1Scene extends Phaser.Scene {
         f.lineStyle(2, 0xffffff, 0.5 + 0.4 * Math.sin(w.t * 12)).strokeCircle(cx, cy, r);
         continue;
       }
-      if (!this.shook.has(gu.id)) {
-        this.shook.add(gu.id);
-        this.cameras.main.shake(250, 0.004);
-      }
       if (this.has('wind')) {
         let img = this.gustImgs.get(gu.id);
         if (!img) {
-          img = this.add.image(cx, cy, K('wind')).setDepth(29).setAlpha(0.9);
+          img = this.W(this.add.image(cx, cy, K('wind')).setDepth(29).setAlpha(0.9));
           this.gustImgs.set(gu.id, img);
         }
         img.setPosition(cx, cy).setScale((r * 2) / img.width).setAngle(w.t * 360);
@@ -671,24 +806,49 @@ export class Stage1Scene extends Phaser.Scene {
     this.renderHud();
   }
 
-  /** 闭合的庇护所：在最上面一排砖的正中挂一个小屋图标和「奶X蛋庇护所」；被挖开后图标消失 */
+  /**
+   * 闭合的庇护所：每个闭合区域都在最上面一排砖的正中挂一个小屋图标和「奶X蛋庇护所」；被挖开后图标消失。
+   * 一个人可以有多个庇护所，每个都算他的。
+   */
   private renderShelterTags() {
     const w = this.world;
-    const box = new Map<number, { x0: number; x1: number; y0: number }>();
+    // 找出每一块连在一起的庇护所内部（四方向连通）
+    const seen = new Uint8Array(w.interior.length);
+    const regions: { owner: number; key: string; x0: number; x1: number; y0: number }[] = [];
     for (let i = 0; i < w.interior.length; i++) {
       const o = w.interior[i];
-      if (o === -1) continue;
-      const x = i % w.cols;
-      const y = (i / w.cols) | 0;
-      const b = box.get(o);
-      if (!b) box.set(o, { x0: x, x1: x, y0: y });
-      else (b.x0 = Math.min(b.x0, x)), (b.x1 = Math.max(b.x1, x)), (b.y0 = Math.min(b.y0, y));
+      if (o === -1 || seen[i]) continue;
+      const r = { owner: o, key: `${o}:${i}`, x0: Infinity, x1: -Infinity, y0: Infinity };
+      const stack = [i];
+      seen[i] = 1;
+      while (stack.length) {
+        const j = stack.pop()!;
+        const x = j % w.cols;
+        const y = (j / w.cols) | 0;
+        r.x0 = Math.min(r.x0, x);
+        r.x1 = Math.max(r.x1, x);
+        r.y0 = Math.min(r.y0, y);
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nx = x + dx;
+          const ny = y + dy;
+          if (!w.inBounds(nx, ny)) continue;
+          const k = w.idx(nx, ny);
+          if (!seen[k] && w.interior[k] === o) (seen[k] = 1), stack.push(k);
+        }
+      }
+      regions.push(r);
     }
-    for (const [o, t] of this.shelterTags) if (!box.has(o)) t.setVisible(false);
-    for (const [o, b] of box) {
-      let t = this.shelterTags.get(o);
+    const alive = new Set(regions.map((r) => r.key));
+    for (const [k, t] of this.shelterTags) {
+      if (!alive.has(k)) {
+        t.destroy();
+        this.shelterTags.delete(k);
+      }
+    }
+    for (const r of regions) {
+      let t = this.shelterTags.get(r.key);
       if (!t) {
-        const a = w.actor(o);
+        const a = w.actor(r.owner);
         const parts: Phaser.GameObjects.GameObject[] = [];
         let nameY = 0;
         if (this.has('shelter')) {
@@ -698,13 +858,13 @@ export class Stage1Scene extends Phaser.Scene {
           nameY = -24 * S();
         }
         parts.push(label(this, 0, nameY, TX.shelterName(a.name, a.human), Math.max(12, Math.round(12 * S())), '#ffe08a').setOrigin(0.5).setStroke('#3a1a10', 4));
-        t = this.add.container(0, 0, parts).setDepth(8);
-        this.shelterTags.set(o, t);
+        t = this.W(this.add.container(0, 0, parts).setDepth(8));
+        this.shelterTags.set(r.key, t);
         // 刚闭合时弹一下
         t.setScale(0);
         this.tweens.add({ targets: t, scale: 1, duration: 300, ease: 'Back.out' });
       }
-      t.setPosition((px(b.x0) + px(b.x1)) / 2, py(b.y0 - 1) - 4).setVisible(true);
+      t.setPosition((px(r.x0) + px(r.x1)) / 2, py(r.y0 - 1) - 4);
     }
   }
 
@@ -780,22 +940,30 @@ export class Stage1Scene extends Phaser.Scene {
 
   // ───────── 提示 ─────────
 
+  /**
+   * 提示消息：底部正中，最多 3 行，最新的在最下面。
+   * 文字对象开局建好、之后复用（不在狂风这种瞬间连续新建，避免手机上卡一下）。
+   */
   private toast(text: string, color = '#dddddd') {
-    // 提示消息：底部正中，最新的在最下面一行
     const bottom = screenEdges(this).bottom;
-    const t = outlineText(this, 640, 0, text, 16, color).setOrigin(0.5, 1).setDepth(61).setWordWrapWidth(700);
+    if (!this.toasts.length) {
+      for (let k = 0; k < 3; k++) this.toasts.push(outlineText(this, 640, 0, '', 16).setOrigin(0.5, 1).setDepth(61).setVisible(false));
+    }
+    // 最旧的那一行拿来显示新消息，挪到最前面
+    const t = this.toasts.pop()!;
     this.toasts.unshift(t);
-    while (this.toasts.length > 3) this.toasts.pop()!.destroy();
+    t.setText(text).setColor(color).setVisible(true);
+    this.toastAt.set(t, this.time.now);
     this.toasts.forEach((x, k) => x.setY(bottom - 34 - k * 26).setAlpha(1 - k * 0.3));
-    this.time.delayedCall(6000, () => {
-      const i = this.toasts.indexOf(t);
-      if (i >= 0) this.toasts.splice(i, 1);
-      t.destroy();
-    });
+  }
+
+  /** 每帧：6 秒前的提示消息隐藏 */
+  private expireToasts() {
+    for (const t of this.toasts) if (t.visible && this.time.now - (this.toastAt.get(t) ?? 0) > 6000) t.setVisible(false);
   }
 
   private floatText(x: number, y: number, text: string, color: string) {
-    const t = outlineText(this, x, y, text, 15, color).setOrigin(0.5).setDepth(60);
+    const t = this.W(outlineText(this, x, y, text, Math.round(15 * S()), color).setOrigin(0.5).setDepth(60));
     this.tweens.add({ targets: t, y: y - 36, alpha: 0, duration: 1200, onComplete: () => t.destroy() });
   }
 }

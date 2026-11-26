@@ -47,6 +47,7 @@ export const STAGE1_IMAGES = {
   spring: 'assets/stage1/spring.png',
   shelter: 'assets/stage1/shelter.png',
   wind: 'assets/stage1/wind.png',
+  arrow: 'assets/stage1/arrow.png', // 灵泉方向箭头（黄色，尾巴渐隐；黑底素材由脚本按发光方式去底）
   egg_down: 'assets/stage1/egg_down.png',
   egg_up: 'assets/stage1/egg_up.png',
   egg_left: 'assets/stage1/egg_left.png',

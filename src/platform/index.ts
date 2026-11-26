@@ -25,6 +25,11 @@ export interface Platform {
   showRewardedAd(placement: string): Promise<boolean>;
   /** 游戏引擎启动后，关掉引擎加载前显示的启动画面（网页是 index.html 里的 #splash） */
   hideSplash(): void;
+  /**
+   * 设置网页底色。iPhone Safari 有时不让画面铺进刘海和底部横条区域，那里露出的是网页底色，
+   * 让它跟着场景背景色变，看起来就和画面连成一片。小游戏不需要。
+   */
+  setPageColor(color: number): void;
   /** 等字体加载好（最多等 timeout 毫秒）；小游戏用 wx.loadFont */
   waitFont(family: string, timeout: number): Promise<void>;
 }
@@ -59,6 +64,14 @@ const web: Platform = {
   vibrate: (ms = 15) => navigator.vibrate?.(ms),
   share: () => {},
   hideSplash: () => document.getElementById('splash')?.remove(),
+  setPageColor: (color) => {
+    const css = `#${color.toString(16).padStart(6, '0')}`;
+    document.documentElement.style.background = css;
+    document.body.style.background = css;
+    const game = document.getElementById('game');
+    if (game) game.style.background = css;
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', css);
+  },
   waitFont: (family, timeout) =>
     Promise.race([
       document.fonts?.load(`40px "${family}"`, '奶').then(() => undefined) ?? Promise.resolve(),

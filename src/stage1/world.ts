@@ -89,8 +89,13 @@ export class World {
   items: (Item | null)[];
   /** 每格属于谁的闭合庇护所内部，-1 表示不属于任何人 */
   interior: Int16Array;
-  /** 已闭合的庇护所主人 */
+  /** 已闭合的庇护所主人（至少有一个闭合庇护所的人） */
   closed = new Set<number>();
+  /**
+   * 每块墙是不是"庇护所的墙"：紧挨着（上下左右或斜角）它主人的闭合庇护所内部才算。
+   * 散落在外面的砖就算主人有别的闭合庇护所，也不算：显示成松散的样子、会被狂风吹走、别人可以直接捡走。
+   */
+  wallClosed: Uint8Array;
   /** 彩蛋：被关在别人闭合庇护所里的角色 → 关住他的人 */
   prisoners = new Map<number, number>();
   gusts: Gust[] = [];
@@ -112,6 +117,7 @@ export class World {
     this.walls = new Int16Array(n).fill(-1);
     this.items = new Array(n).fill(null);
     this.interior = new Int16Array(n).fill(-1);
+    this.wallClosed = new Uint8Array(n);
   }
 
   // ───────── 基础工具 ─────────
@@ -156,10 +162,15 @@ export class World {
     const [dx, dy] = DIRS[a.facing];
     return { x: a.cx + dx, y: a.cy + dy };
   }
-  /** 空手能不能直接把这块墙举起来：自己的随时可以，别人的只有没闭合时可以 */
+  /** 这块墙是不是闭合庇护所的一部分 */
+  isWallClosed(i: number) {
+    return this.walls[i] !== -1 && this.wallClosed[i] === 1;
+  }
+
+  /** 空手能不能直接把这块墙举起来：自己的随时可以，别人的只有不属于闭合庇护所时可以 */
   canLiftWall(a: Actor, i: number) {
     const o = this.walls[i];
-    return o !== -1 && (o === a.id || !this.closed.has(o));
+    return o !== -1 && (o === a.id || !this.isWallClosed(i));
   }
 
   // ───────── 庇护所闭合判断 ─────────
@@ -200,6 +211,21 @@ export class World {
         }
       }
       if (any) this.closed.add(o);
+    }
+    // 逐块判断：墙的 8 个邻格里有它主人的庇护所内部，才算"庇护所的墙"
+    this.wallClosed.fill(0);
+    for (let i = 0; i < n; i++) {
+      const o = this.walls[i];
+      if (o === -1) continue;
+      const x = i % this.cols;
+      const y = (i / this.cols) | 0;
+      for (let dy = -1; dy <= 1 && !this.wallClosed[i]; dy++)
+        for (let dx = -1; dx <= 1; dx++) {
+          if ((dx || dy) && this.inBounds(x + dx, y + dy) && this.interior[this.idx(x + dx, y + dy)] === o) {
+            this.wallClosed[i] = 1;
+            break;
+          }
+        }
     }
     this.dirty = false;
     this.updatePrisoners();
@@ -243,6 +269,20 @@ export class World {
         return { actor: a, score: this.score(a.id), tie: this.tieBreak.get(a.id)! };
       })
       .sort((p, q) => Number(p.actor.gone) - Number(q.actor.gone) || q.score - p.score || p.tie - q.tie);
+  }
+
+  /** 这个人所有闭合庇护所里的瓶子（空瓶 / 奶茶 / 奶瓶），过关时累积到存档 */
+  bottlesIn(owner: number) {
+    let empty = 0;
+    let tea = 0;
+    let milk = 0;
+    this.items.forEach((it, i) => {
+      if (it?.kind !== 'bottle' || this.interior[i] !== owner) return;
+      if (it.fill === 'empty') empty++;
+      else if (it.fill === 'tea') tea++;
+      else milk++;
+    });
+    return { empty, tea, milk };
   }
 
   /** 庇护所里的满瓶（带进下一关当道具） */
@@ -494,7 +534,7 @@ export class World {
       // 没闭合的庇护所，砖块被卷走
       for (let i = 0; i < this.walls.length; i++) {
         const o = this.walls[i];
-        if (o === -1 || this.closed.has(o)) continue;
+        if (o === -1 || this.isWallClosed(i)) continue;
         if (near(i % this.cols, (i / this.cols) | 0)) {
           this.walls[i] = -1;
           this.markDirty();

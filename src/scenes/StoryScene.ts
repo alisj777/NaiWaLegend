@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { currentSkin, Skin } from '../skins';
 import * as art from '../battle/art';
 import { Button, THEME, bodyText, label, pill, scrollPanel } from '../battle/ui';
-import { fitScreen, fullBg, screenEdges } from '../battle/layout';
+import { fitScreen, fullBg, matchPageColorToImage, screenEdges } from '../battle/layout';
 import { duckBgm, playBgm } from '../battle/music';
 import { Guide, showGuide } from '../battle/guide';
 import { STORY, StoryPanelId } from '../copy/story';
@@ -292,7 +292,8 @@ export class StoryScene extends Phaser.Scene {
 
     const keys = wanted.filter((k) => this.textures.exists(storyKey(k)));
     if (keys.length) {
-      const edges = screenEdges(this);
+      // 插画铺满整个屏幕宽度（包括刘海区域）
+      const edges = screenEdges(this, false);
       const vw = edges.right - edges.left;
       this.slides = keys.map((k, i) => {
         // 图片铺满屏幕宽度，从顶部开始；下方被文字框盖住一部分
@@ -304,6 +305,7 @@ export class StoryScene extends Phaser.Scene {
         return { img, key: k };
       });
       this.playSoundFor(keys[0]);
+      matchPageColorToImage(this, storyKey(keys[0]));
     } else {
       p.draw(this, currentSkin());
     }

@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { platform } from '../platform';
 
 /**
  * 全屏适配：游戏按 1280×720 设计，画布宽高比跟随屏幕（fitGameToScreen）。
@@ -18,12 +19,17 @@ export const DESIGN_H = 720;
  */
 export function fitGameToScreen(game: Phaser.Game) {
   const apply = () => {
-    const vw = window.visualViewport?.width ?? window.innerWidth;
-    const vh = window.visualViewport?.height ?? window.innerHeight;
+    // 按游戏容器（#game，铺满整个屏幕，包括刘海区域）的实际大小算比例，画布才能正好贴满，没有黑边
+    const parent = game.scale.parent as HTMLElement | null;
+    const rect = parent?.getBoundingClientRect();
+    const vw = rect?.width || window.innerWidth;
+    const vh = rect?.height || window.innerHeight;
     if (!vw || !vh) return;
     const aspect = vw / vh;
     const w = aspect >= DESIGN_W / DESIGN_H ? Math.round(DESIGN_H * aspect) : DESIGN_W;
     const h = aspect >= DESIGN_W / DESIGN_H ? DESIGN_H : Math.round(DESIGN_W / aspect);
+    cssToGame = w / vw;
+    readSafeArea();
     // FIT 模式要用 setGameSize：它会同时更新画布分辨率和显示比例（resize 只改分辨率，画面会被拉变形）
     if (w !== game.scale.width || h !== game.scale.height) game.scale.setGameSize(w, h);
     else game.scale.refresh();
@@ -39,6 +45,22 @@ export function fitGameToScreen(game: Phaser.Game) {
   game.events.once(Phaser.Core.Events.READY, later);
 }
 
+/**
+ * 安全区（iPhone 刘海、圆角、底部横条）：背景可以铺进去，但按钮、文字、场地要避开。
+ * 用 index.html 里的 #safe-probe（padding 设成 env(safe-area-inset-*)）读出 CSS 像素，再换算成游戏坐标。
+ */
+let cssToGame = 1;
+const safe = { left: 0, right: 0, top: 0, bottom: 0 };
+function readSafeArea() {
+  const probe = document.getElementById('safe-probe');
+  if (!probe) return;
+  const st = getComputedStyle(probe);
+  safe.left = (parseFloat(st.paddingLeft) || 0) * cssToGame;
+  safe.right = (parseFloat(st.paddingRight) || 0) * cssToGame;
+  safe.top = (parseFloat(st.paddingTop) || 0) * cssToGame;
+  safe.bottom = (parseFloat(st.paddingBottom) || 0) * cssToGame;
+}
+
 /** 设计区域之外，左右 / 上下各多出来多少（世界坐标） */
 export function screenExtra(scene: Phaser.Scene) {
   return {
@@ -47,10 +69,14 @@ export function screenExtra(scene: Phaser.Scene) {
   };
 }
 
-/** 屏幕可见范围的左右上下边界（世界坐标） */
-export function screenEdges(scene: Phaser.Scene) {
+/**
+ * 屏幕可见范围的左右上下边界（世界坐标）。
+ * 默认扣掉安全区（刘海等），给按钮、文字、场地摆位置用；背景图要铺满整个屏幕时传 safe = false。
+ */
+export function screenEdges(scene: Phaser.Scene, useSafe = true) {
   const e = screenExtra(scene);
-  return { left: -e.x, right: DESIGN_W + e.x, top: -e.y, bottom: DESIGN_H + e.y };
+  const s = useSafe ? safe : { left: 0, right: 0, top: 0, bottom: 0 };
+  return { left: -e.x + s.left, right: DESIGN_W + e.x - s.right, top: -e.y + s.top, bottom: DESIGN_H + e.y - s.bottom };
 }
 
 /** 把镜头对准设计区域正中；屏幕旋转或尺寸变化时自动重新对准，并通知场景重新摆放贴边元素 */
@@ -65,8 +91,32 @@ export function fitScreen(scene: Phaser.Scene, onResize?: () => void) {
   scene.events.once('shutdown', () => scene.scale.off('resize', apply));
 }
 
-/** 铺满整个屏幕（包括设计区域外）的纯色背景 */
+/** 取一张图左右边缘的平均颜色，设成网页底色（背景是图片时用，刘海和底部区域就和图片边缘接近） */
+export function matchPageColorToImage(scene: Phaser.Scene, key: string) {
+  const src = scene.textures.get(key).getSourceImage() as HTMLImageElement;
+  const w = src.width;
+  const h = src.height;
+  if (!w || !h) return;
+  let r = 0;
+  let g = 0;
+  let b = 0;
+  let n = 0;
+  for (const x of [2, w - 3]) {
+    for (let i = 1; i < 10; i++) {
+      const c = scene.textures.getPixel(x, Math.floor((h * i) / 10), key);
+      if (!c) continue;
+      r += c.red;
+      g += c.green;
+      b += c.blue;
+      n++;
+    }
+  }
+  if (n) platform.setPageColor((Math.round(r / n) << 16) | (Math.round(g / n) << 8) | Math.round(b / n));
+}
+
+/** 铺满整个屏幕（包括设计区域外）的纯色背景；不透明时顺便把网页底色设成同一个颜色（刘海、底部区域就不会是黑的） */
 export function fullBg(scene: Phaser.Scene, color: number, alpha = 1) {
+  if (alpha >= 1) platform.setPageColor(color);
   return scene.add.rectangle(DESIGN_W / 2, DESIGN_H / 2, DESIGN_W * 3, DESIGN_H * 3, color, alpha);
 }
 
