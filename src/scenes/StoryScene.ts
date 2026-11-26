@@ -2,110 +2,177 @@ import Phaser from 'phaser';
 import { currentSkin, Skin } from '../skins';
 import * as art from '../battle/art';
 import { Button, label } from '../battle/ui';
+import { STORY, StoryPanelId } from '../copy/story';
 
-interface Panel {
-  title: string;
-  text: string;
+/**
+ * 剧情插画：由 tools/prepare_assets.py 从 art/reference 处理生成到 public/assets/story/。
+ * 缺图的页面自动用代码画的占位图。
+ */
+const IMAGES = {
+  family: 'assets/story/family.jpg', // 奶蛙家族全家福
+  growth: 'assets/story/growth.jpg', // 成长之路：奶蛋 → 小奶蛙 → 奶蛙
+  doom: 'assets/story/doom.jpg', // 末世：花草枯萎、病毒紫雾、天雷
+  winter: 'assets/story/winter.jpg', // 寒冬的村子
+  dying: 'assets/story/dying.jpg', // 奄奄一息的奶蛙
+  rebirth: 'assets/story/rebirth.jpg', // 重生
+};
+type ImageKey = keyof typeof IMAGES;
+const SOUNDS = {
+  laugh: 'story/laugh-group.mp3', // 多人大笑（全家福那一页播放）
+};
+
+/** 一页配多张图时，每张停留多久再淡入下一张（毫秒） */
+const SLIDE_HOLD = 2600;
+const SLIDE_FADE = 1200;
+
+interface PanelArt {
+  /** 有图就显示图片（多张会依次淡入），否则用 draw 画占位 */
+  image?: ImageKey | ImageKey[];
+  sound?: 'laugh';
   draw: (s: StoryScene, skin: Skin) => void;
 }
 
-/** 开场剧情：牛马村 → 天雷 → 变异病毒 → 暗奶蛋 → 你的使命。逐字打出，点击继续。 */
-const PANELS: Panel[] = [
-  {
-    title: '牛马村',
-    text: '在牛马村的农场上，生活着一群快乐的奶家族：会下蛋的奶鸡、到处乱跑的奶狗、奶猫、奶兔和奶鱼，还有每天埋头干活的牛和马。\n这天清晨，奶鸡生下了一颗圆滚滚的小奶蛋——那就是你。',
+const FRIEND_COLOR = 0xe8dcc0;
+/** 插画区高度（1280×560），素材按 2 倍即 2560×1120 准备 */
+const ART_H = 560;
+
+/** 每页插画，按 id 对应 src/copy/story.ts 里的文案 */
+const ART: Record<StoryPanelId, PanelArt> = {
+  village: {
+    image: 'family',
+    sound: 'laugh',
     draw: (s, skin) => {
+      // 占位：奶蛙家族全家福
       s.ground();
-      s.put(art.drawCow, 260, 330, 1.2);
-      s.put(art.drawHorse, 1010, 330, 1.2);
-      s.put((g) => art.drawChicken(g, skin.colors.neutral), 520, 380, 2);
-      s.put((g) => art.drawDog(g, skin.colors.neutral), 800, 390, 1.6);
-      s.put((g) => art.drawHero(g, 1, skin.colors.light), 650, 400, 1.8);
-      [0, 1, 2].forEach((i) => s.put((g) => art.drawFriend(g, i, skin.colors.neutral), 420 + i * 220, 250, 1.3));
+      const frame = s.add.graphics();
+      frame.fillStyle(0xf6ecd2).fillRoundedRect(300, 60, 680, 400, 12);
+      frame.lineStyle(10, 0xc89b62).strokeRoundedRect(300, 60, 680, 400, 12);
+      s.layer.add(frame);
+      s.layer.add(label(s, 640, 95, STORY.art.familyPhoto, 22, '#8a5a32').setOrigin(0.5));
+      s.put((g) => art.drawHero(g, 4, skin.colors.light), 640, 250, 2.4);
+      s.put((g) => art.drawChicken(g, FRIEND_COLOR), 420, 300, 1.5);
+      s.put((g) => art.drawDog(g, FRIEND_COLOR), 860, 310, 1.4);
+      s.put((g) => art.drawFriend(g, 1, FRIEND_COLOR), 480, 400, 1.3);
+      s.put((g) => art.drawMouse(g, FRIEND_COLOR), 640, 410, 1.4);
+      s.put((g) => art.drawPowder(g, FRIEND_COLOR), 800, 400, 1.3);
+      [520, 580, 700, 760].forEach((x) => s.put((g) => art.drawEgg(g, skin.colors.light, 10), x, 340, 1.2));
+      s.layer.add(label(s, 640, 160, STORY.art.laugh, 20, '#3b6e9b').setOrigin(0.5));
     },
   },
-  {
-    title: '天雷',
-    text: '平静没有持续太久。一天夜里，农场上空乌云翻滚，一道道天雷劈了下来。\n牛和马被劈晕在地，醒来后，身上多了一种奇怪的东西——变异病毒。',
-    draw: (s) => {
+  growth: {
+    image: 'growth',
+    draw: (s, skin) => {
+      s.ground();
+      [1, 2, 3, 4].forEach((lv, i) => {
+        s.put((g) => art.drawHero(g, lv, skin.colors.light), 200 + i * 170, 380, 1.4);
+        if (i < 3) s.layer.add(label(s, 285 + i * 170, 370, '→', 28, '#fff27a').setOrigin(0.5));
+      });
+      s.put((g) => art.drawHero(g, 4, skin.colors.light), 1000, 250, 1.8);
+      [[880, 330], [960, 380], [1060, 380], [1130, 320]].forEach(([x, y]) => {
+        s.put((g) => art.drawEgg(g, skin.colors.light, 10), x, y, 1.3);
+        s.layer.add(label(s, x, y - 40, STORY.art.boss, 15, '#ffffff').setOrigin(0.5).setBackgroundColor('#3b6e9bcc').setPadding(4, 2, 4, 2));
+      });
+    },
+  },
+  split: {
+    draw: (s, skin) => {
+      s.ground();
+      s.put((g) => art.drawHero(g, 4, skin.colors.light), 640, 250, 2.2);
+      const friends: ((g: Phaser.GameObjects.Graphics) => void)[] = [
+        (g) => art.drawChicken(g, FRIEND_COLOR),
+        (g) => art.drawDog(g, FRIEND_COLOR),
+        (g) => art.drawFriend(g, 1, FRIEND_COLOR),
+        (g) => art.drawMouse(g, FRIEND_COLOR),
+        (g) => art.drawPowder(g, FRIEND_COLOR),
+      ];
+      friends.forEach((fn, i) => {
+        const n = STORY.art.friends[i] ?? '';
+        const x = 240 + i * 200;
+        s.put(fn, x, 390, 1.6);
+        s.layer.add(label(s, x, 440, n, 16, '#ffffff').setOrigin(0.5));
+      });
+    },
+  },
+  doom: {
+    image: 'doom',
+    draw: (s, skin) => {
       s.ground(0x2e3b2a);
       s.sky(0x10131c);
       const g = s.add.graphics();
-      art.drawBolt(g, 380, 0, 300);
-      art.drawBolt(g, 900, 0, 300);
-      s.put((gg) => art.drawCow(gg, true), 380, 350, 1.3);
-      s.put((gg) => art.drawHorse(gg, true), 900, 350, 1.3);
-      s.virus(640, 300, 18);
+      art.drawBolt(g, 330, 0, 300);
+      art.drawBolt(g, 950, 0, 300);
+      s.layer.add(g);
+      s.put((gg) => art.drawChicken(gg, skin.colors.dark), 330, 380, 1.6);
+      s.put((gg) => art.drawDog(gg, skin.colors.dark), 950, 390, 1.5);
+      s.put((gg) => art.drawHero(gg, 4, skin.colors.deepDark), 640, 380, 1.8);
+      s.virus(640, 320, 16);
     },
   },
-  {
-    title: '变异病毒',
-    text: '病毒在农场里悄悄蔓延，传染给了奶鸡。被感染的奶鸡开始生下暗奶蛋。\n暗奶蛋长得飞快，成长速度是普通光奶蛋的整整两倍。',
+  winter: {
+    // 先是冰封的村子，再淡入奄奄一息的奶蛙（"在冷风中你闭上了眼睛"）
+    image: ['winter', 'dying'],
     draw: (s, skin) => {
-      s.ground(0x4a5a3a);
-      s.put((g) => art.drawChicken(g, skin.colors.dark), 500, 360, 2.2);
-      s.virus(500, 300, 10);
-      s.put((g) => art.drawEgg(g, skin.colors.dark, 16), 680, 400, 1.6);
-      s.put((g) => art.drawEgg(g, skin.colors.dark, 16), 760, 410, 1.6);
-      s.put((g) => art.drawEgg(g, skin.colors.dark, 16), 840, 400, 1.6);
+      s.ground(0xdfe8ef);
+      s.sky(0x141a26);
+      s.put((g) => art.drawHero(g, 4, skin.colors.light), 640, 400, 1.8).setAlpha(0.45).setAngle(90);
+      s.snow(70);
     },
   },
-  {
-    title: '光与暗',
-    text: '天雷没有停，还在农场上随机落下。它不会伤到谁，却会让毒素一点点积累——\n光派被劈中太多次，也会变异，堕入暗面。',
+  rebirth: {
+    image: 'rebirth',
     draw: (s, skin) => {
-      s.ground(0x3a4a34);
-      s.sky(0x1a1f2b);
-      const g = s.add.graphics();
-      art.drawBolt(g, 640, 0, 330);
-      s.put((gg) => art.drawHero(gg, 1, skin.colors.light), 470, 400, 2.2);
-      label(s, 640, 400, '→', 60, '#fff27a').setOrigin(0.5);
-      s.put((gg) => art.drawHero(gg, 1, skin.colors.dark), 810, 400, 2.2);
+      // 占位：重生画面
+      s.layer.add(s.add.rectangle(0, 0, 1280, ART_H, 0x0e1220).setOrigin(0));
+      const glow = s.add.graphics({ x: 640, y: 260 });
+      for (let r = 220; r > 0; r -= 20) glow.fillStyle(0xfff27a, 0.05).fillCircle(0, 0, r);
+      s.layer.add(glow);
+      s.tweens.add({ targets: glow, scale: 1.15, yoyo: true, repeat: -1, duration: 1400, ease: 'Sine.inOut' });
+      s.put((g) => art.drawHero(g, 1, skin.colors.light), 640, 260, 3);
+      s.layer.add(label(s, 640, 440, STORY.art.rebirthNight, 20, '#9cc4ff').setOrigin(0.5));
     },
   },
-  {
-    title: '你的使命',
-    text: '现在，一颗暗奶蛋盯上了你。\n躲开天雷，收集奶屎，用卡牌和朋友们一起战斗——从一颗小奶蛋，长成传说中的西格玛奶蛙！',
-    draw: (s, skin) => {
-      s.ground();
-      s.put((g) => art.drawHero(g, 1, skin.colors.light), 360, 400, 2.4);
-      s.put((g) => art.drawHero(g, 1, skin.colors.dark), 920, 400, 2.4);
-      label(s, 640, 390, 'VS', 64, '#fff27a').setOrigin(0.5);
-      s.put((g) => art.drawHero(g, 5, skin.colors.light), 640, 230, 1.6).setAlpha(0.35);
-    },
-  },
-];
+};
+
+/** 序章：奶家村 → 成长 → 分化 → 末世 → 寒冬 → 重生。逐字打出，点击继续。 */
+const PANELS = STORY.panels.map((p) => ({ ...p, ...ART[p.id] }));
 
 export class StoryScene extends Phaser.Scene {
   private index = 0;
-  private layer!: Phaser.GameObjects.Container;
+  layer!: Phaser.GameObjects.Container;
   private textObj!: Phaser.GameObjects.Text;
   private titleObj!: Phaser.GameObjects.Text;
   private full = '';
   private shown = 0;
   private typing?: Phaser.Time.TimerEvent;
+  private slideTimer?: Phaser.Time.TimerEvent;
   private nextBtn!: Button;
 
   constructor() {
     super('Story');
   }
 
+  preload() {
+    for (const [k, url] of Object.entries(IMAGES)) this.load.image(`story-${k}`, url);
+    for (const [k, url] of Object.entries(SOUNDS)) this.load.audio(`story-${k}`, url);
+  }
+
   create() {
     this.index = 0;
     this.add.rectangle(0, 0, 1280, 720, 0x1d2330).setOrigin(0);
     this.layer = this.add.container(0, 0);
-    this.add.rectangle(0, 500, 1280, 220, 0x10141c, 0.95).setOrigin(0);
-    this.titleObj = label(this, 60, 520, '', 24, '#fff27a');
-    this.textObj = this.add.text(60, 562, '', {
+    // 上面 0~560 是插画区，下面 160 像素是文字框
+    this.add.graphics().fillStyle(0x10141c, 0.95).fillRoundedRect(0, ART_H, 1280, 720 - ART_H, { tl: 20, tr: 20, bl: 0, br: 0 });
+    this.titleObj = label(this, 60, ART_H + 12, '', 22, '#fff27a');
+    this.textObj = this.add.text(60, ART_H + 46, '', {
       fontFamily: art.FONT,
       fontSize: '20px',
       color: '#ffffff',
       wordWrap: { width: 1000 },
       lineSpacing: 8,
     });
-    this.nextBtn = new Button(this, 1100, 640, 140, 50, '继续', () => this.onNext(), 0x3b6e9b);
-    new Button(this, 1100, 20, 140, 40, '跳过剧情', () => this.goBattle(), 0x555555);
-    this.input.on('pointerdown', (p: Phaser.Input.Pointer) => p.y < 500 && this.onNext());
+    this.nextBtn = new Button(this, 1100, 650, 140, 50, STORY.next, () => this.onNext(), 0x3b6e9b);
+    new Button(this, 1100, 20, 140, 40, STORY.skip, () => this.goBattle(), 0x555555);
+    this.input.on('pointerdown', (p: Phaser.Input.Pointer) => p.y < ART_H && this.onNext());
     this.input.keyboard?.on('keydown-SPACE', () => this.onNext());
     this.show();
   }
@@ -123,7 +190,7 @@ export class StoryScene extends Phaser.Scene {
   }
 
   ground(color = 0x7fb069) {
-    this.layer.add(this.add.rectangle(0, 280, 1280, 220, color).setOrigin(0));
+    this.layer.add(this.add.rectangle(0, 280, 1280, ART_H - 280, color).setOrigin(0));
     const fence = this.add.graphics();
     fence.fillStyle(0xc89b62);
     for (let x = 10; x < 1280; x += 36) fence.fillRect(x, 262, 8, 30);
@@ -155,13 +222,47 @@ export class StoryScene extends Phaser.Scene {
     }
   }
 
+  snow(n: number) {
+    for (let i = 0; i < n; i++) {
+      const f = this.add.circle(Phaser.Math.Between(0, 1280), Phaser.Math.Between(-500, 0), Phaser.Math.Between(2, 4), 0xffffff, 0.85);
+      this.layer.add(f);
+      this.tweens.add({ targets: f, y: 520, x: f.x + Phaser.Math.Between(-60, 60), duration: Phaser.Math.Between(3000, 6000), repeat: -1, delay: Phaser.Math.Between(0, 3000) });
+    }
+  }
+
   // ───────── 翻页与逐字显示 ─────────
 
   private show() {
     this.layer.each((o: Phaser.GameObjects.GameObject) => this.tweens.killTweensOf(o));
     this.layer.removeAll(true);
     const p = PANELS[this.index];
-    p.draw(this, currentSkin());
+    this.slideTimer?.remove();
+    const keys = (p.image ? ([] as ImageKey[]).concat(p.image) : []).map((k) => `story-${k}`).filter((k) => this.textures.exists(k));
+    if (keys.length) {
+      const imgs = keys.map((k, i) => {
+        const img = this.add.image(640, ART_H / 2, k).setAlpha(i === 0 ? 1 : 0);
+        const base = Math.max(1280 / img.width, ART_H / img.height);
+        img.setScale(base);
+        // 镜头缓慢推进，让静态图有点生气
+        this.tweens.add({ targets: img, scale: base * 1.05, duration: 9000, ease: 'Sine.out' });
+        this.layer.add(img);
+        return img;
+      });
+      // 多张图：依次淡入
+      let next = 1;
+      if (imgs.length > 1) {
+        this.slideTimer = this.time.addEvent({
+          delay: SLIDE_HOLD,
+          repeat: imgs.length - 2,
+          callback: () => this.tweens.add({ targets: imgs[next++], alpha: 1, duration: SLIDE_FADE }),
+        });
+      }
+    } else {
+      p.draw(this, currentSkin());
+    }
+    // 翻页时停掉上一页的声音
+    this.sound.stopAll();
+    if (p.sound && this.cache.audio.exists(`story-${p.sound}`)) this.sound.play(`story-${p.sound}`);
     this.layer.setAlpha(0);
     this.tweens.add({ targets: this.layer, alpha: 1, duration: 400 });
     this.titleObj.setText(`${p.title}  ${this.index + 1}/${PANELS.length}`);
@@ -178,7 +279,7 @@ export class StoryScene extends Phaser.Scene {
         if (this.shown >= this.full.length) this.typing?.remove();
       },
     });
-    this.nextBtn.setLabel(this.index === PANELS.length - 1 ? '开始新手引导' : '继续');
+    this.nextBtn.setLabel(this.index === PANELS.length - 1 ? STORY.finish : STORY.next);
   }
 
   private onNext() {
@@ -196,6 +297,7 @@ export class StoryScene extends Phaser.Scene {
 
   private goBattle() {
     this.typing?.remove();
-    this.scene.start('Battle', { tutorial: true });
+    this.sound.stopAll();
+    this.scene.start('Stage1');
   }
 }

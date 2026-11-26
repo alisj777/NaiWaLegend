@@ -3,16 +3,27 @@ import { BALANCE as B } from '../config/balance';
 import { currentSkin } from '../skins';
 import * as art from '../battle/art';
 import { Button, label } from '../battle/ui';
+import { platform } from '../platform';
 
 export class MenuScene extends Phaser.Scene {
   constructor() {
     super('Menu');
   }
 
+  preload() {
+    // 村子母版（由 tools/prepare_assets.py 生成）；缺图时用纯色背景
+    this.load.image('menu-village', 'assets/menu/village.jpg');
+  }
+
   create() {
     const skin = currentSkin();
     this.add.rectangle(0, 0, 1280, 720, 0x1d2330).setOrigin(0);
-    label(this, 640, 60, skin.title, 56, '#fff27a').setOrigin(0.5);
+    if (this.textures.exists('menu-village')) {
+      this.add.image(640, 360, 'menu-village').setDisplaySize(1280, 720);
+      // 压暗一层，保证上面的文字和进化线看得清
+      this.add.rectangle(0, 0, 1280, 720, 0x10141c, 0.55).setOrigin(0);
+    }
+    label(this, 640, 60, skin.title, 56, '#fff27a').setOrigin(0.5).setStroke('#3a2a10', 6);
     label(this, 640, 120, '即时卡牌 RPG · 从奶蛋长成西格玛', 20, '#9aa4b8').setOrigin(0.5);
 
     // 进化线展示
@@ -34,7 +45,13 @@ export class MenuScene extends Phaser.Scene {
     ];
     label(this, 640, 470, rules.join('\n'), 16, '#dddddd').setOrigin(0.5, 0).setLineSpacing(8);
 
-    new Button(this, 420, 610, 220, 60, '开始游戏\n（剧情 + 新手引导）', () => this.scene.start('Story'), 0x3b6e9b);
-    new Button(this, 660, 610, 200, 60, '快速开始\n（跳过引导）', () => this.scene.start('Battle', { tutorial: false }));
+    new Button(this, 310, 610, 220, 60, '开始游戏\n（序章剧情）', () => this.scene.start('Story'), 0x3b6e9b);
+    new Button(this, 550, 610, 200, 60, '第一关\n狂风夜', () => this.scene.start('Stage1'), 0x9b6a3b);
+    new Button(this, 770, 610, 200, 60, '对战\n（跳过引导）', () => this.scene.start('Battle', { tutorial: false }));
+
+    // 手机网页：全屏并锁定横屏（安卓支持；iPhone 的 Safari 不支持网页全屏，可以“添加到主屏幕”后打开）
+    if (platform.canRequestFullscreen()) {
+      new Button(this, 1100, 20, 160, 44, '全屏横屏', () => platform.requestFullscreenLandscape(), 0x555555);
+    }
   }
 }

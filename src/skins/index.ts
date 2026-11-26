@@ -1,3 +1,5 @@
+import { platform } from '../platform';
+
 /**
  * 皮肤包：角色名字和配色全部放在这里，与玩法代码解耦。
  * 想做别的版本，就新增一个 Skin 对象并加入 SKINS，然后用 ?skin=<id> 切换。
@@ -56,6 +58,6 @@ const naiwa: Skin = {
 export const SKINS: Record<string, Skin> = { naiwa };
 
 export function currentSkin(): Skin {
-  const id = new URLSearchParams(location.search).get('skin') ?? 'naiwa';
+  const id = platform.getQuery('skin') ?? 'naiwa';
   return SKINS[id] ?? naiwa;
 }

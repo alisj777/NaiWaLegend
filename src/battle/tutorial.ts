@@ -4,7 +4,7 @@ import { currentSkin } from '../skins';
 import type { BattleScene } from '../scenes/BattleScene';
 import { FONT } from './art';
 import { Button } from './ui';
-import { FIELD, Poop } from './entities';
+import { FIELD, Poop } from './logic/battle';
 
 type Wait = 'move' | 'collect' | 'card:chicken' | 'thunder' | 'next';
 
