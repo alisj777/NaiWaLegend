@@ -8,7 +8,7 @@ import { fitScreen, fullBg, screenEdges, screenExtra } from '../battle/layout';
 import { playBgm } from '../battle/music';
 import { showGuide } from '../battle/guide';
 import { platform } from '../platform';
-import { addToStash } from '../progress';
+import { addToStash, saveLevel, saveShelters } from '../progress';
 import { RoundButton, VirtualJoystick } from '../battle/touch';
 import { AIController } from '../stage1/ai';
 import { Actor, Dir, DIRS, Item, World, itemName } from '../stage1/world';
@@ -22,25 +22,25 @@ import { Stage1ImageKey, stage1Key } from '../assets';
  *   顶部正中：狂风 / 灵泉倒计时；底部正中：提示消息
  * 场地上的东西都要用 this.W() 放进场地层，否则只会出现在界面镜头里。
  */
-let T: number = C.grid.viewTile;
+export let T: number = C.grid.viewTile;
 const OX = 0;
 const OY = 0;
-let FW = C.grid.cols * T;
-let FH = C.grid.rows * T;
+export let FW = C.grid.cols * T;
+export let FH = C.grid.rows * T;
 /** 当前每格边长（给需要默认参数的函数用） */
 const TILE = () => T;
 /** 相对原来 32 像素一格的缩放倍数，角色和物资的大小都按它放大 */
-const S = () => T / 32;
+export const S = () => T / 32;
 
 /** 场地大小：每格固定边长，场地放在场地层的 (0, 0) */
-function layoutField() {
+export function layoutField() {
   T = C.grid.viewTile;
   FW = C.grid.cols * T;
   FH = C.grid.rows * T;
 }
 
 /** 把一个对象（以及容器里的所有子对象）重新设为"所有镜头可见"，放进场地层后用 */
-function clearCameraFilter(obj: Phaser.GameObjects.GameObject) {
+export function clearCameraFilter(obj: Phaser.GameObjects.GameObject) {
   obj.cameraFilter = 0;
   if (obj instanceof Phaser.GameObjects.Container) obj.list.forEach(clearCameraFilter);
 }
@@ -67,16 +67,17 @@ interface ActorView {
   carryKey: string;
 }
 
-const px = (x: number) => OX + x * T + T / 2;
-const py = (y: number) => OY + y * T + T / 2;
+export const px = (x: number) => OX + x * T + T / 2;
+export const py = (y: number) => OY + y * T + T / 2;
 
 /** 第一关的图片素材在 src/assets.ts，由启动加载页统一预载；缺哪张就退回代码画的样子 */
-type ImgKey = Stage1ImageKey;
-const K = stage1Key;
+export type ImgKey = Stage1ImageKey;
+export const K = stage1Key;
 
 /** 物资对应的图片，以及在一格里显示的高度（像素） */
 function itemImage(it: Item): { key: ImgKey; h: number } {
   if (it.kind === 'brick') return { key: 'brick', h: 18 * S() };
+  if (it.kind === 'egg') return { key: 'egg_down', h: 22 * S() };
   if (it.kind === 'shovel') return { key: 'shovel', h: 28 * S() };
   return { key: it.fill === 'empty' ? 'bottle_empty' : it.fill === 'tea' ? 'bottle_tea' : 'bottle_milk', h: 27 * S() };
 }
@@ -142,7 +143,7 @@ class FrameProfiler {
 }
 
 /** 黄色虚线框（瞄准框），虚线会慢慢流动，提示"砖会放在这里" */
-function dashedRect(g: Phaser.GameObjects.Graphics, x: number, y: number, w: number, h: number, color: number, alpha: number, lw: number, t: number) {
+export function dashedRect(g: Phaser.GameObjects.Graphics, x: number, y: number, w: number, h: number, color: number, alpha: number, lw: number, t: number) {
   const dash = Math.max(5, w / 6);
   const gap = dash * 0.6;
   const step = dash + gap;
@@ -182,45 +183,102 @@ function drawItem(g: Phaser.GameObjects.Graphics, it: Item, x: number, y: number
 }
 
 export class Stage1Scene extends Phaser.Scene {
-  private world!: World;
-  private me!: Actor;
-  private ais: AIController[] = [];
-  private views = new Map<number, ActorView>();
-  private dyn!: Phaser.GameObjects.Graphics;
-  private fx!: Phaser.GameObjects.Graphics;
-  private running = false;
-  private finished = false;
-  private eggColor = 0x6ea8ff;
+  protected world!: World;
+  protected me!: Actor;
+  protected ais: AIController[] = [];
+  protected views = new Map<number, ActorView>();
+  protected dyn!: Phaser.GameObjects.Graphics;
+  protected fx!: Phaser.GameObjects.Graphics;
+  protected running = false;
+  protected finished = false;
+  protected eggColor = 0x6ea8ff;
 
-  private timerText!: Phaser.GameObjects.Text;
-  private eventText!: Phaser.GameObjects.Text;
-  private statusText!: Phaser.GameObjects.Text;
-  private boardRows: Phaser.GameObjects.Text[] = [];
-  private actionBtn!: RoundButton;
-  private springText!: Phaser.GameObjects.Text;
+  protected timerText!: Phaser.GameObjects.Text;
+  protected eventText!: Phaser.GameObjects.Text;
+  protected statusText!: Phaser.GameObjects.Text;
+  protected boardRows: Phaser.GameObjects.Text[] = [];
+  protected actionBtn!: RoundButton;
+  protected springText!: Phaser.GameObjects.Text;
   /** 庇护所图标：每个闭合区域一个（一个人可以有多个庇护所），按"主人:区域左上角格子"区分 */
-  private shelterTags = new Map<string, Phaser.GameObjects.Container>();
+  protected shelterTags = new Map<string, Phaser.GameObjects.Container>();
   /** 图片对象池：地上的物资按格子编号复用，避免每帧新建 */
-  private itemSprites = new Map<number, Phaser.GameObjects.Image>();
-  private springImg: Phaser.GameObjects.Image | null = null;
+  protected itemSprites = new Map<number, Phaser.GameObjects.Image>();
+  protected springImg: Phaser.GameObjects.Image | null = null;
   /** 每股狂风一张旋转的漩涡图（有素材时） */
-  private gustImgs = new Map<number, Phaser.GameObjects.Image>();
+  protected gustImgs = new Map<number, Phaser.GameObjects.Image>();
   /** 画在砖块上面的一层（自己的墙的白框、灵泉的颜色提示） */
-  private over!: Phaser.GameObjects.Graphics;
-  private toasts: Phaser.GameObjects.Text[] = [];
-  private toastAt = new Map<Phaser.GameObjects.Text, number>();
+  protected over!: Phaser.GameObjects.Graphics;
+  protected toasts: Phaser.GameObjects.Text[] = [];
+  protected toastAt = new Map<Phaser.GameObjects.Text, number>();
   /** 灵泉方向箭头（灵泉在屏幕外时出现在屏幕边缘） */
-  private springArrow?: Phaser.GameObjects.Image | Phaser.GameObjects.Graphics;
+  protected springArrow?: Phaser.GameObjects.Image | Phaser.GameObjects.Graphics;
 
-  private stick!: VirtualJoystick;
+  protected stick!: VirtualJoystick;
   /** 场地层（场地镜头拍它，跟着你移动）和界面镜头（固定在屏幕上，拍四角信息、摇杆、按键、弹窗） */
-  private worldLayer!: Phaser.GameObjects.Layer;
-  private uiCam!: Phaser.Cameras.Scene2D.Camera;
-  private slotGfx: Phaser.GameObjects.Graphics[] = [];
-  private keys!: Record<string, Phaser.Input.Keyboard.Key>;
+  protected worldLayer!: Phaser.GameObjects.Layer;
+  protected uiCam!: Phaser.Cameras.Scene2D.Camera;
+  protected slotGfx: Phaser.GameObjects.Graphics[] = [];
+  protected keys!: Record<string, Phaser.Input.Keyboard.Key>;
 
-  constructor() {
-    super('Stage1');
+  constructor(key = 'Stage1') {
+    super(key);
+  }
+
+  // ───────── 给第二关等子类覆盖的地方 ─────────
+
+  /** 左上角的关卡名、等级标签 */
+  protected hudTitle(): string {
+    return TX.title;
+  }
+  protected hudLevel(): string {
+    return TX.levelTag;
+  }
+  /** 右上角面板的标题和行数 */
+  protected boardTitle(): string {
+    return TX.hud.board;
+  }
+  protected boardCount(): number {
+    return this.world.actors.length;
+  }
+  /** 这一关的背景音乐 */
+  protected bgm(): 'chapter1' | 'doom' | 'rebirth' | 'happy' {
+    return 'chapter1';
+  }
+  /** 开场引导的各页（title、text，可选 icons、diagram） */
+  protected introPages(): readonly { title: string; text: string; icons?: readonly string[]; diagram?: 'shelter' | 'store' }[] {
+    return TX.intro.pages;
+  }
+  /** 引导最后一页点「开始」之后 */
+  protected onIntroDone() {
+    this.running = true;
+    this.toast(TX.toast.start);
+  }
+  /** 角色身体用哪张图（按朝向换图）；返回 null 用代码画的蛋 */
+  protected bodyTexture(a: Actor): ImgKey | null {
+    const k = `egg_${a.facing}` as ImgKey;
+    return this.has(k) ? k : null;
+  }
+  /** 角色身体染色（比如阴暗化的紫色），0xffffff 表示不染 */
+  protected bodyTint(_a: Actor): number {
+    return 0xffffff;
+  }
+  /** 按「举起」键 / 空格时做什么 */
+  protected onAction() {
+    if (this.running) this.world.act(this.me);
+  }
+  /** 摇杆和方向键什么时候能用 */
+  protected controlsActive() {
+    return this.running;
+  }
+  /** 建好规则世界、玩家和其他角色 */
+  protected createWorld() {
+    const w = (this.world = new World());
+    this.me = w.addActor({ id: 0, name: TX.playerName, human: true, cx: 13, cy: 7, speed: 1 });
+    RIVAL_HOMES.forEach(([hx, hy], k) => {
+      const a = w.addActor({ id: k + 1, name: TX.rivalNames[k], human: false, cx: hx, cy: hy, speed: C.ai.speedFactor });
+      this.ais.push(new AIController(w, a, hx, hy));
+    });
+    w.spawnItems(true);
   }
 
   init() {
@@ -238,12 +296,12 @@ export class Stage1Scene extends Phaser.Scene {
     this.springArrow = undefined;
   }
 
-  private has(k: ImgKey) {
+  protected has(k: ImgKey) {
     return this.textures.exists(K(k));
   }
 
   /** 放进场地层：场地镜头拍得到、界面镜头拍不到 */
-  private W<O extends Phaser.GameObjects.GameObject>(obj: O): O {
+  protected W<O extends Phaser.GameObjects.GameObject>(obj: O): O {
     this.worldLayer.add(obj);
     clearCameraFilter(obj);
     return obj;
@@ -253,7 +311,7 @@ export class Stage1Scene extends Phaser.Scene {
    * 两个镜头：场地镜头（main）跟着你；界面镜头（uiCam）固定，坐标和其他场景一样按 1280×720 设计区域摆。
    * 新建的对象默认只给界面镜头拍；场地上的东西用 this.W() 放进场地层。
    */
-  private setupCameras() {
+  protected setupCameras() {
     this.worldLayer = this.add.layer();
     this.uiCam = this.cameras.add(0, 0, this.scale.width, this.scale.height);
     this.uiCam.ignore(this.worldLayer);
@@ -269,15 +327,10 @@ export class Stage1Scene extends Phaser.Scene {
     fitScreen(this, () => this.placeEdges());
     layoutField();
     this.eggColor = currentSkin().colors.light;
-    const w = (this.world = new World());
-    this.me = w.addActor({ id: 0, name: TX.playerName, human: true, cx: 13, cy: 7, speed: 1 });
-    RIVAL_HOMES.forEach(([hx, hy], k) => {
-      const a = w.addActor({ id: k + 1, name: TX.rivalNames[k], human: false, cx: hx, cy: hy, speed: C.ai.speedFactor });
-      this.ais.push(new AIController(w, a, hx, hy));
-    });
-    w.spawnItems(true);
+    this.createWorld();
+    const w = this.world;
 
-    playBgm(this, 'chapter1');
+    playBgm(this, this.bgm());
     this.drawStatic();
     this.dyn = this.W(this.add.graphics().setDepth(5));
     this.over = this.W(this.add.graphics().setDepth(7));
@@ -295,7 +348,7 @@ export class Stage1Scene extends Phaser.Scene {
   }
 
   /** 摇杆和举起键贴着屏幕真正的左右边缘（屏幕比 16:9 宽时往外挪，方便拇指） */
-  private placeEdges() {
+  protected placeEdges() {
     if (this.uiCam) {
       const ex = screenExtra(this);
       this.uiCam.setSize(this.scale.width, this.scale.height).setScroll(-ex.x, -ex.y);
@@ -312,7 +365,7 @@ export class Stage1Scene extends Phaser.Scene {
 
   // ───────── 场地与 HUD ─────────
 
-  private drawStatic() {
+  protected drawStatic() {
     this.W(fullBg(this, 0x26303a).setDepth(-10));
     // 场地：圆角草地，格线用圆角遮罩裁掉，避免角上露出直角
     const R = 18;
@@ -331,11 +384,12 @@ export class Stage1Scene extends Phaser.Scene {
     this.W(this.add.graphics().lineStyle(4, 0xc89b62, 0.9).strokeRoundedRect(OX, OY, FW, FH, R));
   }
 
-  private buildHud() {
+  protected buildHud() {
     const e = screenEdges(this);
-    const n = this.world.actors.length;
+    const n = this.boardCount();
     // 左上：关卡名 + 剩余时间
-    titleText(this, e.left + 22, e.top + 12, TX.title, 28).setDepth(60);
+    const title = titleText(this, e.left + 22, e.top + 12, this.hudTitle(), 28).setDepth(60);
+    pill(this, e.left + 22 + title.width + 70, e.top + 34, this.hudLevel(), THEME.orange, 15).setDepth(60);
     this.timerText = outlineText(this, e.left + 26, e.top + 58, '', 22).setDepth(60);
     // 顶部正中：狂风 / 灵泉倒计时
     this.eventText = outlineText(this, 640, e.top + 18, '', 18, '#d8ecff').setOrigin(0.5, 0).setDepth(60);
@@ -346,7 +400,7 @@ export class Stage1Scene extends Phaser.Scene {
     const boardH = 34 + n * 48;
     const board = this.add.container(0, 0).setDepth(60).setAlpha(0.92);
     board.add(creamPanel(this, bx, e.top + 22, bw, boardH, 18));
-    board.add(pill(this, bx + bw / 2, e.top + 22, TX.hud.board, THEME.green, 15));
+    board.add(pill(this, bx + bw / 2, e.top + 22, this.boardTitle(), THEME.green, 15));
     for (let k = 0; k < n; k++) {
       const t = bodyText(this, bx + 16, e.top + 46 + k * 48, '', 14).setLineSpacing(2);
       board.add(t);
@@ -361,27 +415,27 @@ export class Stage1Scene extends Phaser.Scene {
     status.add(this.statusText);
 
     // 右下：举起键 + 预留技能键位（位置在 placeEdges 里摆）
-    this.actionBtn = new RoundButton(this, 0, 0, KEYS.r, TX.action.idle, () => this.running && this.world.act(this.me), 0xf0a860, 19);
+    this.actionBtn = new RoundButton(this, 0, 0, KEYS.r, TX.action.idle, () => this.onAction(), 0xf0a860, 19);
     this.slotGfx = KEYS.slots.map((k) =>
       this.add.graphics().setDepth(89).lineStyle(2, 0xffffff, 0.18).strokeCircle(0, 0, k.r).fillStyle(0xffffff, 0.06).fillCircle(0, 0, k.r),
     );
     if (!this.sys.game.device.input.touch) outlineText(this, 640, e.bottom - 22, TX.hud.keyboardHint, 13, '#d0d6e0').setOrigin(0.5).setDepth(60);
   }
 
-  private bindInput() {
+  protected bindInput() {
     const kb = this.input.keyboard!;
     this.keys = kb.addKeys('UP,DOWN,LEFT,RIGHT,W,A,S,D') as Record<string, Phaser.Input.Keyboard.Key>;
-    kb.on('keydown-SPACE', () => this.running && this.world.act(this.me));
-    kb.on('keydown-J', () => this.running && this.world.act(this.me));
+    kb.on('keydown-SPACE', () => this.onAction());
+    kb.on('keydown-J', () => this.onAction());
 
     // 摇杆在界面镜头里：手指的屏幕位置 + 界面镜头的偏移 = 摇杆坐标（不能用 worldX，它可能按跟随镜头换算）
-    this.stick = new VirtualJoystick(this, { x: 150, y: 490 }, new Phaser.Geom.Rectangle(0, 200, 580, 520), STICK_R, () => this.running, (p) => ({
+    this.stick = new VirtualJoystick(this, { x: 150, y: 490 }, new Phaser.Geom.Rectangle(0, 200, 580, 520), STICK_R, () => this.controlsActive(), (p) => ({
       x: p.x + this.uiCam.scrollX,
       y: p.y + this.uiCam.scrollY,
     }));
   }
 
-  private keyDir(): Dir | null {
+  protected keyDir(): Dir | null {
     const k = this.keys;
     if (k.UP.isDown || k.W.isDown) return 'up';
     if (k.DOWN.isDown || k.S.isDown) return 'down';
@@ -390,7 +444,7 @@ export class Stage1Scene extends Phaser.Scene {
     return null;
   }
 
-  private makeView(a: Actor) {
+  protected makeView(a: Actor) {
     // 所有奶蛋同一套皮肤，只靠头上的名字区分；玩家多一圈白色描边
     const arrow = this.add.graphics();
     const carry = this.add.graphics();
@@ -398,9 +452,10 @@ export class Stage1Scene extends Phaser.Scene {
     // 有奶蛋素材就用图片，否则用代码画的蛋
     let bodyImg: Phaser.GameObjects.Image | null = null;
     let body: Phaser.GameObjects.GameObject;
-    if (this.has('egg_down')) {
-      bodyImg = this.add.image(0, 2, K('egg_down'));
-      bodyImg.setScale((30 * S()) / bodyImg.height);
+    const tex = this.bodyTexture(a);
+    if (tex) {
+      bodyImg = this.add.image(0, 2, K(tex));
+      bodyImg.setScale((30 * S()) / bodyImg.height).setTint(this.bodyTint(a));
       body = bodyImg;
     } else {
       const g = this.add.graphics();
@@ -426,7 +481,7 @@ export class Stage1Scene extends Phaser.Scene {
 
   // ───────── 开场提示与结算 ─────────
 
-  private modal(h: number) {
+  protected modal(h: number) {
     const layer = this.add.container(0, 0).setDepth(100);
     layer.add(fullBg(this, 0x000000, 0.5).setInteractive());
     // 横向卷轴（左右两根竖轴），比纸面内容稍宽一点，给两边的轴留位置
@@ -438,8 +493,8 @@ export class Stage1Scene extends Phaser.Scene {
    * 开场引导：分页讲解（末世背景 → 砖块 → 狂风 → 空瓶灵泉 → 铁锹），每页配物资图片，
    * 系统停在卷轴左边陪着讲，最后一页点「开始」。文案在 src/copy/stage1.ts 的 intro.pages。
    */
-  private showIntro() {
-    const pages = TX.intro.pages;
+  protected showIntro() {
+    const pages = this.introPages();
     const layer = this.modal(560);
     const guide = showGuide(this, 150, 260, { from: 'left', height: 230, depth: 102, delay: 300 });
     // 每页会变的内容放在 content 里，翻页时整个换掉
@@ -458,7 +513,7 @@ export class Stage1Scene extends Phaser.Scene {
       const c = this.add.container(0, 0).setDepth(101);
       c.add(titleText(this, 640, 128, pg.title, 36).setOrigin(0.5));
       // 物资图片一字排开（放大到 130），示意图放在图片右边或单独居中
-      const icons = pg.icons.filter((k) => this.has(k as ImgKey));
+      const icons = (pg.icons ?? []).filter((k) => this.has(k as ImgKey));
       const items: { w: number; draw: (cx: number) => void }[] = icons.map((k) => ({
         w: 140,
         draw: (cx) => {
@@ -499,8 +554,7 @@ export class Stage1Scene extends Phaser.Scene {
         return;
       }
       close();
-      this.running = true;
-      this.toast(TX.toast.start);
+      this.onIntroDone();
     }, THEME.orange);
     // 预留广告位：看激励视频直接跳过本关（以后上微信接入广告）
     const ad = new Button(this, 780, 550, 200, 60, TX.intro.adSkip, () => this.skipByAd(close), THEME.grey);
@@ -509,7 +563,7 @@ export class Stage1Scene extends Phaser.Scene {
     render();
   }
 
-  private finish() {
+  protected finish() {
     this.finished = true;
     this.running = false;
     const R = TX.result;
@@ -524,17 +578,19 @@ export class Stage1Scene extends Phaser.Scene {
       const out = k >= cut;
       layer.add(bodyText(this, 640, 225 + k * 40, R.row(k + 1, r.actor.name, r.score, out), 21).setOrigin(0.5).setColor(out ? '#c0392b' : r.actor.human ? '#c0601a' : THEME.text));
     });
-    // 过关：所有庇护所里的瓶子都算你的，累积进存档，后面的关卡可以用
+    // 过关：所有庇护所里的瓶子都算你的，累积进存档；庇护所形状（按闭合顺序）和等级也存下来，第二关要用
     if (pass) {
       const got = this.world.bottlesIn(this.me.id);
       const total = addToStash(got);
+      saveShelters(this.world.shelterShapes(this.me.id));
+      saveLevel(2);
       layer.add(bodyText(this, 640, 405, R.collected(got.empty, got.tea, got.milk), 18).setOrigin(0.5).setColor('#b5651d'));
       layer.add(bodyText(this, 640, 435, R.total(total.empty, total.tea, total.milk), 18).setOrigin(0.5).setColor('#2e7d32').setFontStyle('bold'));
     }
     const btns: Button[] = [];
     const done = () => btns.forEach((b) => b.destroy());
     // 下一章还没做好：晋级后显示"敬请期待"；淘汰时提供看广告跳过
-    if (pass) btns.push(new Button(this, 430, 500, 200, 60, R.comingSoon, () => {}, THEME.green).setEnabled(false));
+    if (pass) btns.push(new Button(this, 430, 500, 200, 60, R.nextChapter, () => (done(), this.levelUp()), THEME.green));
     else btns.push(new Button(this, 430, 500, 200, 60, TX.intro.adSkip, () => this.skipByAd(() => (done(), layer.destroy())), THEME.grey));
     btns.push(new Button(this, 645, 500, 190, 60, R.retry, () => (done(), this.scene.restart()), THEME.orange));
     btns.push(new Button(this, 850, 500, 190, 60, R.menu, () => (done(), this.scene.start('Menu')), THEME.blue));
@@ -546,7 +602,7 @@ export class Stage1Scene extends Phaser.Scene {
    *   shelter：左边 3 块砖缺一块 ✗ 没闭合；右边 4 块砖上下左右围住中间 ✓ 闭合 = 庇护所
    *   store：4 块砖围成的庇护所，中间放着一个满瓶
    */
-  private introDiagram(kind: 'shelter' | 'store', cx: number, cy: number) {
+  protected introDiagram(kind: 'shelter' | 'store', cx: number, cy: number) {
     const c = this.add.container(0, 0);
     const t = 38;
     const ring = (ox: number, closed: boolean, missing = -1) => {
@@ -588,17 +644,24 @@ export class Stage1Scene extends Phaser.Scene {
     return c;
   }
 
-  /** 看广告跳过本关：看完直接算晋级（下一章做好后改成进入下一章） */
-  private async skipByAd(close: () => void) {
+  /** 看广告跳过本关：看完直接算晋级（没有盖庇护所，第二关会给一个最小的庇护所） */
+  protected async skipByAd(close: () => void) {
     const ok = await platform.showRewardedAd('stage1-skip');
     if (!ok) return;
     close();
     this.running = false;
     this.finished = true;
-    const layer = this.modal(300);
-    layer.add(titleText(this, 640, 300, TX.result.pass, 44).setOrigin(0.5));
-    layer.add(bodyText(this, 640, 370, TX.result.comingSoon, 22).setOrigin(0.5));
-    new Button(this, 545, 420, 190, 60, TX.result.menu, () => this.scene.start('Menu'), THEME.blue).setDepth(101);
+    saveLevel(2);
+    this.levelUp();
+  }
+
+  /** 过关后：系统飘出来宣布升级 Lv.2 小奶蛙，然后进入第二章剧情 */
+  protected levelUp() {
+    const layer = this.modal(320);
+    showGuide(this, 230, 330, { from: 'left', height: 220, depth: 102 });
+    layer.add(titleText(this, 660, 260, 'Lv.2', 52).setOrigin(0.5));
+    layer.add(bodyText(this, 660, 330, TX.result.levelUp, 24).setOrigin(0.5).setAlign('center').setLineSpacing(10));
+    new Button(this, 560, 410, 200, 64, TX.result.nextChapter, () => this.scene.start('Story', { chapter: 'ch2' }), THEME.orange).setDepth(101);
   }
 
   // ───────── 主循环 ─────────
@@ -630,7 +693,7 @@ export class Stage1Scene extends Phaser.Scene {
    * 灵泉方向箭头：灵泉出现、但在屏幕外时，屏幕边缘出现黄色箭头指向它（尾巴渐隐），一闪一闪；看得见灵泉时隐藏。
    * 箭头画在界面镜头里，位置用"场地坐标 → 屏幕 → 界面坐标"换算。
    */
-  private updateSpringArrow() {
+  protected updateSpringArrow() {
     const sp = this.world.spring;
     const cam = this.cameras.main;
     if (!sp || !this.running) {
@@ -674,7 +737,7 @@ export class Stage1Scene extends Phaser.Scene {
     a.setAlpha(0.65 + 0.35 * Math.sin(this.time.now / 180));
   }
 
-  private drainEvents() {
+  protected drainEvents() {
     const w = this.world;
     const me = this.me.id;
     const T2 = TX.toast;
@@ -697,7 +760,7 @@ export class Stage1Scene extends Phaser.Scene {
     w.events.length = 0;
   }
 
-  private render() {
+  protected render() {
     const w = this.world;
     const g = this.dyn.clear();
     const tileXY = (i: number) => [OX + (i % w.cols) * T, OY + ((i / w.cols) | 0) * T];
@@ -741,6 +804,19 @@ export class Stage1Scene extends Phaser.Scene {
         this.itemSprites.set(i, img);
       }
       if (img.texture.key !== K(key)) img.setTexture(K(key));
+      // 奶蛋（第二关）：感染后换成紫色裂纹的图，最后 1.5 秒换成快爆炸的炸弹并闪烁；没有素材时用染色
+      if (it.kind === 'egg' && (it.infectedAt ?? -1) >= 0) {
+        const bomb = 3 - (w.t - it.infectedAt!) < 1.5;
+        const ek: ImgKey = bomb ? 'egg_bomb' : 'egg_infected';
+        if (this.has(ek)) {
+          if (img.texture.key !== K(ek)) img.setTexture(K(ek));
+          img.clearTint().setAlpha(bomb && Math.floor(w.t * 8) % 2 ? 0.6 : 1);
+        } else {
+          img.setTint(bomb && Math.floor(w.t * 8) % 2 ? 0xff5040 : 0xa070e0);
+        }
+      } else {
+        img.clearTint().setAlpha(1);
+      }
       img.setPosition(cx, cy).setScale(h / img.height).setVisible(true);
     });
     for (const [i, img] of this.itemSprites) if (!usedItem.has(i)) img.setVisible(false);
@@ -810,7 +886,7 @@ export class Stage1Scene extends Phaser.Scene {
    * 闭合的庇护所：每个闭合区域都在最上面一排砖的正中挂一个小屋图标和「奶X蛋庇护所」；被挖开后图标消失。
    * 一个人可以有多个庇护所，每个都算他的。
    */
-  private renderShelterTags() {
+  protected renderShelterTags() {
     const w = this.world;
     // 找出每一块连在一起的庇护所内部（四方向连通）
     const seen = new Uint8Array(w.interior.length);
@@ -868,7 +944,7 @@ export class Stage1Scene extends Phaser.Scene {
     }
   }
 
-  private renderActor(a: Actor) {
+  protected renderActor(a: Actor) {
     const w = this.world;
     const v = this.views.get(a.id)!;
     const out = w.t < a.outUntil && w.t >= a.flyUntil;
@@ -889,8 +965,10 @@ export class Stage1Scene extends Phaser.Scene {
       v.box.setPosition(px(a.fx + (a.cx - a.fx) * k), py(a.fy + (a.cy - a.fy) * k) - hop).setAngle(0).setScale(1);
     }
     if (v.body) {
-      const key = K(`egg_${a.facing}` as ImgKey);
-      if (v.body.texture.key !== key && this.textures.exists(key)) v.body.setTexture(key);
+      const tex = this.bodyTexture(a);
+      const key = tex ? K(tex) : '';
+      if (key && v.body.texture.key !== key && this.textures.exists(key)) v.body.setTexture(key);
+      v.body.setTint(this.bodyTint(a));
     }
     const [dx, dy] = DIRS[a.facing];
     const a1 = 19 * S();
@@ -911,7 +989,7 @@ export class Stage1Scene extends Phaser.Scene {
     }
   }
 
-  private renderHud() {
+  protected renderHud() {
     const w = this.world;
     const H = TX.hud;
     const left = Math.max(0, C.duration - w.t);
@@ -944,7 +1022,7 @@ export class Stage1Scene extends Phaser.Scene {
    * 提示消息：底部正中，最多 3 行，最新的在最下面。
    * 文字对象开局建好、之后复用（不在狂风这种瞬间连续新建，避免手机上卡一下）。
    */
-  private toast(text: string, color = '#dddddd') {
+  protected toast(text: string, color = '#dddddd') {
     const bottom = screenEdges(this).bottom;
     if (!this.toasts.length) {
       for (let k = 0; k < 3; k++) this.toasts.push(outlineText(this, 640, 0, '', 16).setOrigin(0.5, 1).setDepth(61).setVisible(false));
@@ -958,11 +1036,11 @@ export class Stage1Scene extends Phaser.Scene {
   }
 
   /** 每帧：6 秒前的提示消息隐藏 */
-  private expireToasts() {
+  protected expireToasts() {
     for (const t of this.toasts) if (t.visible && this.time.now - (this.toastAt.get(t) ?? 0) > 6000) t.setVisible(false);
   }
 
-  private floatText(x: number, y: number, text: string, color: string) {
+  protected floatText(x: number, y: number, text: string, color: string) {
     const t = this.W(outlineText(this, x, y, text, Math.round(15 * S()), color).setOrigin(0.5).setDepth(60));
     this.tweens.add({ targets: t, y: y - 36, alpha: 0, duration: 1200, onComplete: () => t.destroy() });
   }

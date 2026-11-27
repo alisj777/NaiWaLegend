@@ -73,6 +73,11 @@ export class VirtualJoystick {
     if (this.pointerId === -1) this.release();
   }
 
+  /** 这根手指的点击被别的操作用掉了（比如抓手点中了蛋），摇杆不再响应它 */
+  cancel(id: number) {
+    if (this.pointerId === id) this.release();
+  }
+
   release() {
     this.pointerId = -1;
     this.dir = null;

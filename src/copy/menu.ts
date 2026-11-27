@@ -4,6 +4,8 @@ export const MENU_TEXT = {
   subtitle: '从一颗奶蛋，长成西格玛奶蛙',
   start: '开始冒险',
   stage1: '第一关 · 狂风夜',
+  /** 通过第一关后才出现 */
+  stage2: '第二关 · 天雷已废废',
   battle: '对战模式',
   fullscreen: '全屏横屏',
 } as const;

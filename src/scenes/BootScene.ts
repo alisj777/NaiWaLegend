@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { SPRITESHEETS, SYSTEM_ANIM, allAssets } from '../assets';
+import { SPRITESHEETS, allAssets } from '../assets';
 import { FONT } from '../battle/art';
 import { platform } from '../platform';
 import { fitScreen, fullBg } from '../battle/layout';
@@ -47,9 +47,11 @@ export class BootScene extends Phaser.Scene {
   }
 
   create() {
-    // 序列帧动画只需要建一次，所有场景共用
-    if (this.textures.exists('system-anim') && !this.anims.exists(SYSTEM_ANIM)) {
-      this.anims.create({ key: SYSTEM_ANIM, frames: this.anims.generateFrameNumbers('system-anim'), frameRate: SPRITESHEETS['system-anim'].fps, repeat: -1 });
+    // 序列帧动画只需要建一次，所有场景共用（清单在 src/assets.ts 的 SPRITESHEETS）
+    for (const [key, sh] of Object.entries(SPRITESHEETS)) {
+      if (this.textures.exists(key) && !this.anims.exists(sh.anim)) {
+        this.anims.create({ key: sh.anim, frames: this.anims.generateFrameNumbers(key), frameRate: sh.fps, repeat: -1 });
+      }
     }
     // 等标题字体就绪再进首页：Phaser 的文字创建时就画好了，字体晚到不会自动重画
     platform.waitFont('TitleFont', 3000).then(() => this.time.delayedCall(150, () => this.scene.start('Menu')));

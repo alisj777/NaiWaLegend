@@ -6,6 +6,8 @@ import { STAGE1 as C } from '../config/stage1';
  */
 export const STAGE1_TEXT = {
   title: '第一关 · 狂风夜',
+  /** 第一关时玩家的等级 */
+  levelTag: 'Lv.1 奶蛋',
 
   // ───────── 角色 ─────────
   playerName: '你',
@@ -14,7 +16,7 @@ export const STAGE1_TEXT = {
   shelterName: (owner: string, isPlayer: boolean) => (isPlayer ? '你的庇护所' : `${owner}庇护所`),
   prisonerTag: '被囚禁',
 
-  items: { brick: '砖块', shovel: '铁锹', empty: '空瓶', tea: '奶茶', milk: '奶瓶' },
+  items: { brick: '砖块', shovel: '铁锹', empty: '空瓶', tea: '奶茶', milk: '奶瓶', egg: '奶蛋' },
 
   // ───────── 开场提示 ─────────
   /**
@@ -26,7 +28,7 @@ export const STAGE1_TEXT = {
     pages: [
       {
         title: '末世来临',
-        text: `末世来临，狂风即将席卷奶家村！\n建立你的庇护所，并囤好物资。\n${C.duration / 60} 分钟后按庇护所里的物资排名，最后 ${C.eliminate} 名淘汰。`,
+        text: `你是 Lv.1 奶蛋，生活在奶蛋园。\n末世来临，狂风即将席卷奶家村！建立你的庇护所，并囤好物资。\n${C.duration / 60} 分钟后按庇护所里的物资排名，最后 ${C.eliminate} 名淘汰。`,
         icons: [] as string[],
         diagram: undefined as 'shelter' | 'store' | undefined,
       },
@@ -122,6 +124,9 @@ export const STAGE1_TEXT = {
   // ───────── 结算 ─────────
   result: {
     pass: '晋级！',
+    /** 过关后系统宣布升级 */
+    levelUp: '恭喜你度过第一关「狂风夜」，\n成长为 Lv.2 小奶蛙，进入奶家学院！',
+    nextChapter: '进入第二章',
     fail: '你被淘汰了',
     /** 被狂风卷出场外时的结算标题 */
     blownAway: '你被狂风卷走了',

@@ -27,6 +27,11 @@ export const STORY_IMAGES = {
   split: 'assets/story/split.jpg', // 分化：大家长大成人（穿西装）
   rebirth: 'assets/story/rebirth.jpg', // 重生
   system: 'assets/story/system.png', // 引导角色「系统」：半透明蓝色幽灵（透明底）
+  // 第二章剧情（素材到了以后由 tools/prepare_assets.py 生成；没有时用代码画的占位）
+  ch2_school: 'assets/story/ch2_school.jpg', // 小奶蛙拿着奶茶走在奶家学院，回头望见天雷
+  ch2_strike: 'assets/story/ch2_strike.jpg', // 天雷劈中村民，奶鸡和小奶蛙变暗紫色
+  ch2_madness: 'assets/story/ch2_madness.jpg', // 感染的村民郁郁寡欢、暴躁、互相攻击
+  ch2_think: 'assets/story/ch2_think.jpg', // 小奶蛙握拳思考
 };
 export type StoryImageKey = keyof typeof STORY_IMAGES;
 export const storyKey = (k: string) => `story-${k}`;
@@ -48,6 +53,24 @@ export const STAGE1_IMAGES = {
   shelter: 'assets/stage1/shelter.png',
   wind: 'assets/stage1/wind.png',
   arrow: 'assets/stage1/arrow.png', // 灵泉方向箭头（黄色，尾巴渐隐；黑底素材由脚本按发光方式去底）
+  // 第二关：小奶蛙四个方向（玩家和伙伴）、奶鸡（阴暗奶鸡用代码染成紫色）
+  frog_down: 'assets/stage1/frog_down.png',
+  frog_up: 'assets/stage1/frog_up.png',
+  frog_left: 'assets/stage1/frog_left.png',
+  frog_right: 'assets/stage1/frog_right.png',
+  chicken: 'assets/stage1/chicken.png',
+  // 第二关：感染后的奶鸡、小奶蛙四个方向、奶蛋（感染 / 快爆炸）、天雷、奶三角（引导配图）
+  dark_chicken: 'assets/stage1/dark_chicken.png',
+  dfrog_down: 'assets/stage1/dfrog_down.png',
+  dfrog_up: 'assets/stage1/dfrog_up.png',
+  dfrog_left: 'assets/stage1/dfrog_left.png',
+  dfrog_right: 'assets/stage1/dfrog_right.png',
+  egg_infected: 'assets/stage1/egg_infected.png',
+  egg_bomb: 'assets/stage1/egg_bomb.png',
+  thunder: 'assets/stage1/thunder.png',
+  triangle: 'assets/stage1/triangle.png',
+  claw_open: 'assets/stage1/claw_open.png', // 抓手（张开）：伸出去时
+  claw_closed: 'assets/stage1/claw_closed.png', // 抓手（合上）：抓着蛋收回时
   egg_down: 'assets/stage1/egg_down.png',
   egg_up: 'assets/stage1/egg_up.png',
   egg_left: 'assets/stage1/egg_left.png',
@@ -74,9 +97,12 @@ export const bgmKey = (k: BgmKey) => `bgm-${k}`;
  */
 export const SPRITESHEETS = {
   // 引导角色「系统」：挥手、转身、飘动，循环播放
-  'system-anim': { url: 'assets/story/system_anim.png', frameWidth: 200, frameHeight: 200, fps: 10 },
+  'system-anim': { url: 'assets/story/system_anim.png', frameWidth: 200, frameHeight: 200, fps: 10, anim: 'system-float' },
+  // 奶三角：三只小奶蛙手拉手转圈
+  'triangle-anim': { url: 'assets/stage1/triangle_anim.png', frameWidth: 220, frameHeight: 220, fps: 10, anim: 'triangle-spin' },
 };
 export const SYSTEM_ANIM = 'system-float';
+export const TRIANGLE_ANIM = 'triangle-spin';
 
 /** 启动时要预载的全部素材 */
 export function allAssets() {

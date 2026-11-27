@@ -4,6 +4,7 @@ import { Button, THEME, outlineText, scrollPanel, titleText } from '../battle/ui
 import { coverImage, fitScreen, fullBg, matchPageColorToImage, screenEdges } from '../battle/layout';
 import { platform } from '../platform';
 import { playBgm } from '../battle/music';
+import { loadLevel } from '../progress';
 
 /**
  * 首页：村子背景铺满屏幕，大标题，右边大笑的奶蛙、左边奶蛋，中间三个胶囊按钮。
@@ -53,9 +54,12 @@ export class MenuScene extends Phaser.Scene {
     const x = 640 - bw / 2;
     const panel = this.add.container(0, 0).setAlpha(0.96);
     // 上下两根横轴的卷轴，按钮放在中间的纸面上
-    panel.add(scrollPanel(this, x - 70, 250, bw + 140, 320, 'tall'));
+    // 通过第一关（等级 ≥ 2）后多出第二关入口，卷轴跟着变高
+    const has2 = loadLevel() >= 2;
+    panel.add(scrollPanel(this, x - 70, 250, bw + 140, has2 ? 400 : 320, 'tall'));
     new Button(this, x, 330, bw, bh, TX.start, () => this.scene.start('Story'), THEME.orange);
     new Button(this, x, 418, bw, bh, TX.stage1, () => this.scene.start('Stage1'), THEME.green);
+    if (has2) new Button(this, x, 506, bw, bh, TX.stage2, () => this.scene.start('Story', { chapter: 'ch2' }), THEME.blue);
 
     // 手机网页：全屏并锁定横屏（安卓支持；iPhone 的 Safari 不支持网页全屏，可以"添加到主屏幕"后打开）
     if (platform.canRequestFullscreen()) {

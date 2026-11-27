@@ -22,6 +22,7 @@ OUT = ROOT / "public" / "assets"
 #   参数 tol：判定为背景的容差，越大去得越狠（能去掉浅灰色影子，但太大会吃掉物体的浅色边缘）
 #   参数 glass：玻璃等透明物体，物体内部透出的白底也变透明
 #   luma = 黑底上的白色半透明效果（如狂风）：越亮越不透明，黑色完全透明
+#   参数 quad：源图是 2×2 的四视图时，先切出其中一格（0 左上、1 右上、2 左下、3 右下）
 #   glow = 黑底上的彩色半透明发光体（如系统幽灵）：保留颜色，越亮越不透明
 # 源图已经是透明底 PNG 时，自动只裁边缩放，不再去底；黑底图也会自动按黑色去底
 JOBS = [
@@ -46,6 +47,11 @@ JOBS = [
     ("intro/doom.png", "story/doom.jpg", "cover", 2560, 1120),
     ("intro/winter.png", "story/winter.jpg", "cover", 2560, 1120),
     ("intro/dying_frog.png", "story/dying.jpg", "cover", 2560, 1120),
+    # 第二章剧情（插画区 1280×560）
+    ("chapter2/ch2_school.png", "story/ch2_school.jpg", "cover", 2560, 1120),
+    ("chapter2/ch2_strike.png", "story/ch2_strike.jpg", "cover", 2560, 1120),
+    ("chapter2/ch2_madness.png", "story/ch2_madness.jpg", "cover", 2560, 1120),
+    ("chapter2/ch2_think.png", "story/ch2_think.jpg", "cover", 2560, 1120),
     # 菜单背景（全屏 1280×720）
     ("menu/village.png", "menu/village.jpg", "cover", 2560, 1440),
     ("naiwa/expr_laugh.png", "menu/frog.png", "cutout", 420, 600, {"tol": 95}),
@@ -61,6 +67,25 @@ JOBS = [
     ("menu/name_tag.png", "ui/name_tag.png", "cutout", 480, 160, {"tol": 40}),
     # 引导角色「系统」：黑底半透明蓝色幽灵
     ("otherCharacters/system.png", "story/system.png", "glow", 400, 400),
+    # 第二关：小奶蛙四个方向（从四视图切：左上正面、右上背面、左下朝左、右下朝右），奶鸡
+    ("littleMilkyFrog/turnaround_4view.png", "stage1/frog_down.png", "cutout", 72, 80, {"tol": 70, "quad": 0}),
+    ("littleMilkyFrog/turnaround_4view.png", "stage1/frog_up.png", "cutout", 72, 80, {"tol": 70, "quad": 1}),
+    ("littleMilkyFrog/turnaround_4view.png", "stage1/frog_left.png", "cutout", 72, 80, {"tol": 70, "quad": 2}),
+    ("littleMilkyFrog/turnaround_4view.png", "stage1/frog_right.png", "cutout", 72, 80, {"tol": 70, "quad": 3}),
+    ("otherCharacters/chicken.png", "stage1/chicken.png", "cutout", 80, 80, {"tol": 60}),
+    # 第二关：感染后的奶鸡、小奶蛙（四视图）、奶蛋（感染 / 快爆炸）、天雷（黑底发光）、奶三角（引导配图）
+    ("chapter2/dark_chicken.png", "stage1/dark_chicken.png", "cutout", 84, 84, {"tol": 45}),
+    ("chapter2/dark_froglet_4view.png", "stage1/dfrog_down.png", "cutout", 72, 80, {"tol": 60, "quad": 0}),
+    ("chapter2/dark_froglet_4view.png", "stage1/dfrog_up.png", "cutout", 72, 80, {"tol": 60, "quad": 1}),
+    ("chapter2/dark_froglet_4view.png", "stage1/dfrog_left.png", "cutout", 72, 80, {"tol": 60, "quad": 2}),
+    ("chapter2/dark_froglet_4view.png", "stage1/dfrog_right.png", "cutout", 72, 80, {"tol": 60, "quad": 3}),
+    ("chapter2/egg_infected.png", "stage1/egg_infected.png", "cutout", 64, 72, {"tol": 45}),
+    ("chapter2/egg_bomb.png", "stage1/egg_bomb.png", "cutout", 64, 72, {"tol": 45}),
+    ("chapter2/thunder.png", "stage1/thunder.png", "glow", 160, 400),
+    ("chapter2/triangle.png", "stage1/triangle.png", "cutout", 200, 200, {"tol": 60, "white_all": True}),
+    # 抓手：张开 / 合上，爪子朝上（画面里按伸出方向旋转）
+    ("chapter2/claw_open.png", "stage1/claw_open.png", "cutout", 96, 96, {"tol": 60}),
+    ("chapter2/claw_closed.png", "stage1/claw_closed.png", "cutout", 96, 96, {"tol": 60}),
     # 奶蛋（第一关的 5 个奶蛋都用这一套）
     ("egg/view_front.png", "stage1/egg_down.png", "cutout", 64, 72, {"tol": 75}),
     ("egg/view_back.png", "stage1/egg_up.png", "cutout", 64, 72, {"tol": 75}),
@@ -98,8 +123,10 @@ def convert_audio():
 
 # 动画：黑底视频 → 去黑底的序列帧图（spritesheet），游戏里循环播放
 #   (源视频, 输出图, 每秒取几帧, 每帧边长)。每帧大小固定，填进 src/assets.ts 的 SPRITESHEETS
+#   最后一项是去底方式：glow = 黑底发光体（如系统）；cutout = 白底（如奶三角转圈）
 SHEET_JOBS = [
-    ("otherCharacters/system_anim.mp4", "story/system_anim.png", 10, 200),
+    ("otherCharacters/system_anim.mp4", "story/system_anim.png", 10, 200, "glow"),
+    ("chapter2/triangle_anim.mp4", "stage1/triangle_anim.png", 10, 220, "cutout"),
 ]
 
 
@@ -107,14 +134,15 @@ def make_sheets():
     import subprocess
     import tempfile
 
-    for src, dst, fps, size in SHEET_JOBS:
+    for src, dst, fps, size, mode in SHEET_JOBS:
         s = REF / src
         if not s.exists():
             print(f"跳过（找不到源文件）：{src}")
             continue
         with tempfile.TemporaryDirectory() as tmp:
             subprocess.run(["ffmpeg", "-v", "error", "-i", str(s), "-vf", f"fps={fps}", f"{tmp}/f%03d.png"], check=True)
-            frames = [glow_full(Image.open(p)) for p in sorted(Path(tmp).glob("f*.png"))]
+            paths = sorted(Path(tmp).glob("f*.png"))
+            frames = [glow_full(Image.open(p)) if mode == "glow" else cutout_full(Image.open(p)) for p in paths]
         # 所有帧共用一个裁剪框（取并集），保证角色在每帧里位置一致、不会抖
         box = None
         for f in frames:
@@ -135,6 +163,11 @@ def make_sheets():
         # 压到 256 色：体积约降到原来的 1/6，缩小显示时看不出差别
         sheet.quantize(colors=256, method=Image.Quantize.FASTOCTREE, dither=Image.Dither.FLOYDSTEINBERG).save(d, optimize=True)
         print(f"{dst:28s} {len(frames)} 帧，每帧 {size}×{size}  {d.stat().st_size // 1024} KB")
+
+
+def cutout_full(img: Image.Image) -> Image.Image:
+    """白底去底，但不裁边（序列帧要统一裁剪）；被围住的白底也去掉"""
+    return cutout_untrimmed(img, tol=60, white_all=True)
 
 
 def glow_full(img: Image.Image) -> Image.Image:
@@ -178,15 +211,20 @@ def glow(img: Image.Image) -> Image.Image:
     return trim(Image.fromarray(out, "RGBA"))
 
 
-def cutout(img: Image.Image, tol=42, glass=False, white_bg_fallback=None) -> Image.Image:
+def cutout(img: Image.Image, tol=42, glass=False, white_bg_fallback=None, white_all=False) -> Image.Image:
     if has_transparency(img):
         return trim(img.convert("RGBA"))
+    return trim(cutout_untrimmed(img, tol, glass, white_all))
+
+
+def cutout_untrimmed(img: Image.Image, tol=42, glass=False, white_all=False) -> Image.Image:
+    """去掉和四边连成一片的背景（背景色取四个角的平均），保持原图大小"""
     tol_lo, tol_hi = 12, tol
     rgb = np.asarray(img.convert("RGB")).astype(np.int16)
     h, w, _ = rgb.shape
-    # 背景色取四个角的平均
-    corners = np.array([rgb[0, 0], rgb[0, w - 1], rgb[h - 1, 0], rgb[h - 1, w - 1]])
-    bg = corners.mean(axis=0)
+    # 背景色取整圈边缘像素的中位数（比只看四个角稳：角上偶尔会碰到角色或阴影）
+    border_px = np.concatenate([rgb[0], rgb[-1], rgb[:, 0], rgb[:, -1]])
+    bg = np.median(border_px, axis=0)
     dist = np.abs(rgb - bg).max(axis=2)
     candidate = dist < tol_hi
     # 从四边出发做洪水填充，只把和边缘连成一片的浅色区域当背景（物体内部的白色不会被挖掉）
@@ -204,8 +242,12 @@ def cutout(img: Image.Image, tol=42, glass=False, white_bg_fallback=None) -> Ima
         ramp = np.clip((dist - tol_lo) / (tol_hi - tol_lo), 0, 1) * 255
         inner = ~is_bg & candidate
         alpha[inner] = np.maximum(ramp[inner], 70)
+    if white_all:
+        # 被角色围起来、没和边缘连通的白底（比如奶三角中间）：接近纯白的地方也变透明
+        near_white = (rgb.min(axis=2) > 232) & (rgb.max(axis=2) - rgb.min(axis=2) < 18)
+        alpha[near_white] = 0
     out = np.dstack([rgb.astype(np.uint8), alpha.astype(np.uint8)])
-    return trim(Image.fromarray(out, "RGBA"))
+    return Image.fromarray(out, "RGBA")
 
 
 def fit(img: Image.Image, mw: int, mh: int) -> Image.Image:
@@ -247,6 +289,10 @@ def main():
         d = OUT / dst
         d.parent.mkdir(parents=True, exist_ok=True)
         img = Image.open(s)
+        quad = opt.pop("quad", None) if isinstance(opt, dict) else None
+        if quad is not None:
+            w2, h2 = img.width // 2, img.height // 2
+            img = img.crop(((quad % 2) * w2, (quad // 2) * h2, (quad % 2 + 1) * w2, (quad // 2 + 1) * h2))
         white_bg = not has_transparency(img) and corner_brightness(img) > 200
         if mode == "cover":
             cover(img.convert("RGB"), mw, mh, **opt).save(d, quality=85, optimize=True)

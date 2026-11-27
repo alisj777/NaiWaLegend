@@ -5,7 +5,7 @@ import { Button, THEME, bodyText, label, pill, scrollPanel } from '../battle/ui'
 import { fitScreen, fullBg, matchPageColorToImage, screenEdges } from '../battle/layout';
 import { duckBgm, playBgm } from '../battle/music';
 import { Guide, showGuide } from '../battle/guide';
-import { STORY, StoryPanelId } from '../copy/story';
+import { STORY, STORY_CH2, StoryPanelId } from '../copy/story';
 import { BgmKey, STORY_IMAGES, StoryImageKey, storyKey } from '../assets';
 
 /** 剧情插画和音频在 src/assets.ts，由启动加载页统一预载；缺图的页面自动用代码画的占位图 */
@@ -143,10 +143,68 @@ const ART: Record<StoryPanelId, PanelArt> = {
       s.layer.add(label(s, 640, 440, STORY.art.rebirthNight, 20, '#9cc4ff').setOrigin(0.5));
     },
   },
+  // ───────── 第二章开头 ─────────
+  ch2_school: {
+    image: 'ch2_school',
+    bgm: 'doom',
+    draw: (s, skin) => {
+      s.ground(0x9a9a52);
+      s.sky(0x3a3550);
+      const g = s.add.graphics();
+      art.drawBolt(g, 900, 0, 220);
+      s.layer.add(g);
+      s.put((gg) => art.drawChicken(gg, FRIEND_COLOR), 380, 380, 1.8);
+      s.put((gg) => art.drawHero(gg, 3, skin.colors.light), 700, 400, 1.8);
+    },
+  },
+  ch2_strike: {
+    image: 'ch2_strike',
+    bgm: 'doom',
+    draw: (s, skin) => {
+      s.ground(0x4a4a3a);
+      s.sky(0x10131c);
+      const g = s.add.graphics();
+      art.drawBolt(g, 420, 0, 330);
+      art.drawBolt(g, 860, 0, 330);
+      s.layer.add(g);
+      s.put((gg) => art.drawChicken(gg, 0x8a5ab0), 420, 400, 1.8);
+      s.put((gg) => art.drawHero(gg, 3, 0x8a5ab0), 860, 410, 1.8);
+      s.virus(640, 320, 14);
+    },
+  },
+  ch2_madness: {
+    image: 'ch2_madness',
+    bgm: 'doom',
+    draw: (s) => {
+      s.ground(0x3a3a34);
+      s.sky(0x1a1426);
+      s.put((gg) => art.drawChicken(gg, 0x6a3a90), 360, 400, 1.8);
+      s.put((gg) => art.drawHero(gg, 3, 0x6a3a90), 640, 400, 1.8);
+      s.put((gg) => art.drawChicken(gg, 0x6a3a90), 920, 400, 1.8);
+      s.virus(640, 300, 20);
+    },
+  },
+  ch2_think: {
+    image: 'ch2_think',
+    bgm: 'rebirth',
+    draw: (s, skin) => {
+      s.ground(0x5e7f4a);
+      s.sky(0x22283a);
+      s.put((gg) => art.drawHero(gg, 3, skin.colors.light), 640, 390, 2.6);
+    },
+  },
 };
 
-/** 序章：奶家村 → 成长 → 分化 → 末世 → 寒冬 → 重生。逐字打出，点击继续。 */
-const PANELS = STORY.panels.map((p) => ({ ...p, ...ART[p.id] }));
+/**
+ * 剧情分章：intro = 序章（奶家村 → 成长 → 分化 → 末世 → 寒冬 → 重生），播完进第一关；
+ * ch2 = 第二章开头（奶家学院 → 天雷降临 → 阴暗病毒 → 苟住），播完进第二关。逐字打出，点击继续。
+ */
+const CHAPTERS = {
+  intro: { panels: STORY.panels.map((p) => ({ ...p, ...ART[p.id] })), finish: STORY.finish, next: 'Stage1' },
+  ch2: { panels: STORY_CH2.panels.map((p) => ({ ...p, ...ART[p.id] })), finish: STORY_CH2.finish, next: 'Stage2' },
+};
+type ChapterKey = keyof typeof CHAPTERS;
+type Panel = (typeof CHAPTERS)['intro']['panels'][number] | (typeof CHAPTERS)['ch2']['panels'][number];
 
 export class StoryScene extends Phaser.Scene {
   private index = 0;
@@ -174,6 +232,16 @@ export class StoryScene extends Phaser.Scene {
 
   constructor() {
     super('Story');
+  }
+
+  /** 当前播放的这一章 */
+  private chapter: ChapterKey = 'intro';
+  private get panels(): Panel[] {
+    return CHAPTERS[this.chapter].panels as Panel[];
+  }
+
+  init(data: { chapter?: ChapterKey }) {
+    this.chapter = data?.chapter ?? 'intro';
   }
 
   create() {
@@ -266,7 +334,7 @@ export class StoryScene extends Phaser.Scene {
 
   /** 显示当前页。typeNow=false 时只换画面，打字由调用方稍后开始（开场文字框浮出动画用） */
   private show(typeNow = true) {
-    const p = PANELS[this.index];
+    const p = this.panels[this.index];
     const wanted = p.image ? ([] as ImageKey[]).concat(p.image) : [];
     // 有图没加载到（网络慢或偶发失败）：当场补加载，加载完再显示；补不回来就用占位图
     const missing = wanted.filter((k) => !this.textures.exists(storyKey(k)));
@@ -320,9 +388,9 @@ export class StoryScene extends Phaser.Scene {
     this.tag?.destroy();
     this.tag = p.speaker
       ? pill(this, BOX.x + 80, BOX.y, p.title, THEME.blue, 20)
-      : pill(this, BOX.x + 110, BOX.y, `${p.title}  ${this.index + 1}/${PANELS.length}`, THEME.orange, 18);
+      : pill(this, BOX.x + 110, BOX.y, `${p.title}  ${this.index + 1}/${this.panels.length}`, THEME.orange, 18);
     this.box.add(this.tag);
-    this.nextBtn.setLabel(this.index === PANELS.length - 1 ? STORY.finish : STORY.next);
+    this.nextBtn.setLabel(this.index === this.panels.length - 1 ? CHAPTERS[this.chapter].finish : STORY.next);
     this.parts = ([] as string[]).concat(p.text);
     this.partIndex = 0;
     this.full = this.parts[0];
@@ -375,7 +443,7 @@ export class StoryScene extends Phaser.Scene {
   }
 
   private playSoundFor(k: ImageKey) {
-    const snd = PANELS[this.index].sound;
+    const snd = this.panels[this.index].sound;
     if (!snd || snd.on !== k || !this.cache.audio.exists(storyKey(snd.key))) return;
     this.sfx?.destroy();
     this.sfx = this.sound.add(storyKey(snd.key));
@@ -404,12 +472,12 @@ export class StoryScene extends Phaser.Scene {
       this.full = this.parts[this.partIndex];
       this.shown = 0;
       this.textObj.setText('');
-      if (PANELS[this.index].systemAtPart === this.partIndex) this.showSystem();
+      if (this.panels[this.index].systemAtPart === this.partIndex) this.showSystem();
       this.startTyping();
       return;
     }
     this.index++;
-    if (this.index >= PANELS.length) return this.goNext();
+    if (this.index >= this.panels.length) return this.goNext();
     this.show();
   }
 
@@ -417,6 +485,6 @@ export class StoryScene extends Phaser.Scene {
     this.typing?.remove();
     this.slideTimer?.remove();
     this.sfx?.stop();
-    this.scene.start('Stage1');
+    this.scene.start(CHAPTERS[this.chapter].next);
   }
 }

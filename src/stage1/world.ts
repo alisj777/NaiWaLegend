@@ -11,11 +11,25 @@ export type Dir = 'up' | 'down' | 'left' | 'right';
 export const DIRS: Record<Dir, [number, number]> = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
 export const DIR_LIST: Dir[] = ['up', 'down', 'left', 'right'];
 
-export type ItemKind = 'brick' | 'bottle' | 'shovel';
+export type ItemKind = 'brick' | 'bottle' | 'shovel' | 'egg';
 export type Fill = 'empty' | 'tea' | 'milk';
 export interface Item {
   kind: ItemKind;
   fill: Fill;
+  /** 奶蛋（第二关）：被感染的时刻（-1 = 没感染）。感染后几秒变成炸弹爆炸 */
+  infectedAt?: number;
+  /** 奶蛋（第二关）：被阴暗生物连续攻击了多久 */
+  attackT?: number;
+}
+
+/** 规则引擎开关：第二关等关卡复用这套网格和庇护所规则时，可以关掉第一关特有的东西 */
+export interface WorldOptions {
+  /** 一局多少秒 */
+  duration: number;
+  wind: boolean;
+  spring: boolean;
+  /** 定时刷新砖块、瓶子、铁锹 */
+  refresh: boolean;
 }
 
 export interface Actor {
@@ -76,6 +90,12 @@ export type WorldEvent =
   | { type: 'prison'; prisoner: number; captor: number }
   | { type: 'free'; prisoner: number };
 
+ /** 一个庇护所的形状：墙格和内部格，坐标相对左上角 */
+export interface ShelterShape {
+  walls: [number, number][];
+  inner: [number, number][];
+}
+
 export const itemName = (it: Item) => (it.kind === 'bottle' ? TX.items[it.fill] : TX.items[it.kind]);
 
 export class World {
@@ -96,6 +116,8 @@ export class World {
    * 散落在外面的砖就算主人有别的闭合庇护所，也不算：显示成松散的样子、会被狂风吹走、别人可以直接捡走。
    */
   wallClosed: Uint8Array;
+  /** 每块墙第一次成为庇护所一部分的时刻（用来排庇护所闭合的先后顺序；不属于庇护所时为 -1） */
+  wallClosedAt: Float32Array;
   /** 彩蛋：被关在别人闭合庇护所里的角色 → 关住他的人 */
   prisoners = new Map<number, number>();
   gusts: Gust[] = [];
@@ -112,12 +134,16 @@ export class World {
   private tieBreak = new Map<number, number>();
   private dirty = true;
 
-  constructor() {
+  readonly opts: WorldOptions;
+
+  constructor(opts: Partial<WorldOptions> = {}) {
+    this.opts = { duration: C.duration, wind: true, spring: true, refresh: true, ...opts };
     const n = this.cols * this.rows;
     this.walls = new Int16Array(n).fill(-1);
     this.items = new Array(n).fill(null);
     this.interior = new Int16Array(n).fill(-1);
     this.wallClosed = new Uint8Array(n);
+    this.wallClosedAt = new Float32Array(n).fill(-1);
   }
 
   // ───────── 基础工具 ─────────
@@ -179,7 +205,7 @@ export class World {
    * 对每个主人：从场地边缘出发，只把他自己的墙当障碍做洪水填充，
    * 走不到、又不是墙的格子就是他闭合庇护所的内部。四方向连通，所以墙角可以不放砖。
    */
-  private recomputeInteriors() {
+  protected recomputeInteriors() {
     this.interior.fill(-1);
     this.closed.clear();
     const owners = new Set<number>();
@@ -227,6 +253,10 @@ export class World {
           }
         }
     }
+    for (let i = 0; i < n; i++) {
+      if (this.wallClosed[i] && this.wallClosedAt[i] < 0) this.wallClosedAt[i] = this.t;
+      else if (!this.wallClosed[i]) this.wallClosedAt[i] = -1;
+    }
     this.dirty = false;
     this.updatePrisoners();
   }
@@ -269,6 +299,52 @@ export class World {
         return { actor: a, score: this.score(a.id), tie: this.tieBreak.get(a.id)! };
       })
       .sort((p, q) => Number(p.actor.gone) - Number(q.actor.gone) || q.score - p.score || p.tie - q.tie);
+  }
+
+  /**
+   * 这个人的每个闭合庇护所的形状（墙和内部格子，相对左上角），按闭合的先后顺序排好。
+   * 第一关过关时存进存档，第二关开局按这个顺序依次放置。
+   */
+  shelterShapes(owner: number): ShelterShape[] {
+    if (this.dirty) this.recomputeInteriors();
+    const seen = new Uint8Array(this.interior.length);
+    const out: (ShelterShape & { at: number })[] = [];
+    for (let i = 0; i < this.interior.length; i++) {
+      if (this.interior[i] !== owner || seen[i]) continue;
+      const inner: number[] = [];
+      const stack = [i];
+      seen[i] = 1;
+      while (stack.length) {
+        const j = stack.pop()!;
+        inner.push(j);
+        const x = j % this.cols;
+        const y = (j / this.cols) | 0;
+        for (const [dx, dy] of Object.values(DIRS)) {
+          if (!this.inBounds(x + dx, y + dy)) continue;
+          const k = this.idx(x + dx, y + dy);
+          if (!seen[k] && this.interior[k] === owner) (seen[k] = 1), stack.push(k);
+        }
+      }
+      // 这个区域的墙：内部格子周围一圈（含斜角）属于他、且是庇护所墙的砖
+      const walls = new Set<number>();
+      for (const j of inner) {
+        const x = j % this.cols;
+        const y = (j / this.cols) | 0;
+        for (let dy = -1; dy <= 1; dy++)
+          for (let dx = -1; dx <= 1; dx++) {
+            if (!this.inBounds(x + dx, y + dy)) continue;
+            const k = this.idx(x + dx, y + dy);
+            if (this.walls[k] === owner && this.wallClosed[k]) walls.add(k);
+          }
+      }
+      const all = [...walls, ...inner];
+      const x0 = Math.min(...all.map((k) => k % this.cols));
+      const y0 = Math.min(...all.map((k) => (k / this.cols) | 0));
+      const rel = (k: number): [number, number] => [(k % this.cols) - x0, ((k / this.cols) | 0) - y0];
+      const at = Math.min(...[...walls].map((k) => this.wallClosedAt[k]).filter((v) => v >= 0), Infinity);
+      out.push({ walls: [...walls].map(rel), inner: inner.map(rel), at });
+    }
+    return out.sort((a, b) => a.at - b.at).map(({ walls, inner }) => ({ walls, inner }));
   }
 
   /** 这个人所有闭合庇护所里的瓶子（空瓶 / 奶茶 / 奶瓶），过关时累积到存档 */
@@ -388,16 +464,16 @@ export class World {
     if (this.dirty) this.recomputeInteriors();
     this.t += dt;
 
-    if (this.t >= this.nextRefresh) {
+    if (this.opts.refresh && this.t >= this.nextRefresh) {
       this.nextRefresh += C.refreshInterval;
       this.spawnItems(false);
       this.events.push({ type: 'refresh' });
     }
-    if (this.t >= this.nextWind) {
+    if (this.opts.wind && this.t >= this.nextWind) {
       this.nextWind += C.wind.interval;
       this.spawnWind();
     }
-    if (this.t >= this.nextSpring && this.t < C.duration) {
+    if (this.opts.spring && this.t >= this.nextSpring && this.t < this.opts.duration) {
       this.nextSpring += C.spring.interval;
       this.spawnSpring();
     }
@@ -405,13 +481,22 @@ export class World {
 
     for (const a of this.actors) this.updateActor(a, dt);
     this.updateGusts(dt);
+    this.step(dt);
     if (this.dirty) this.recomputeInteriors();
     else this.updatePrisoners();
 
-    if (this.t >= C.duration) this.ended = true;
+    if (this.t >= this.opts.duration) this.ended = true;
   }
 
-  private updateActor(a: Actor, dt: number) {
+  /** 给子类（其他关卡）加自己的规则，每帧在角色移动之后调用 */
+  protected step(_dt: number) {}
+
+  /** 标记墙变了，下一帧重算庇护所（子类改墙时用） */
+  protected wallsChanged() {
+    this.dirty = true;
+  }
+
+  protected updateActor(a: Actor, dt: number) {
     if (a.outUntil > 0 && this.t >= a.outUntil) {
       // 从场边回来
       const p = this.randomTile((x, y) => (x === 0 || y === 0 || x === this.cols - 1 || y === this.rows - 1) && this.passable(a, x, y) && this.interior[this.idx(x, y)] === -1);
@@ -457,7 +542,7 @@ export class World {
 
   // ───────── 物资刷新 ─────────
 
-  private randomTile(ok: (x: number, y: number) => boolean) {
+  protected randomTile(ok: (x: number, y: number) => boolean) {
     for (let k = 0; k < 400; k++) {
       const x = (Math.random() * this.cols) | 0;
       const y = (Math.random() * this.rows) | 0;
@@ -473,7 +558,7 @@ export class World {
 
   spawnItems(initial: boolean) {
     if (this.dirty) this.recomputeInteriors();
-    for (const kind of ['brick', 'bottle', 'shovel'] as ItemKind[]) {
+    for (const kind of ['brick', 'bottle', 'shovel'] as const) {
       const cfg = C.items[kind];
       const onGround = this.items.filter((it) => it?.kind === kind).length;
       const n = Math.min(initial ? cfg.initial : cfg.perRefresh, cfg.cap - onGround);

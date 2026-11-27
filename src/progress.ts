@@ -28,3 +28,29 @@ export function addToStash(add: Stash): Stash {
   platform.save(KEY, s);
   return s;
 }
+
+/** 第一关存下的庇护所形状（按闭合先后顺序），第二关开局依次放置 */
+export interface SavedShelter {
+  walls: [number, number][];
+  inner: [number, number][];
+}
+const SHELTER_KEY = 'naiwa.shelters.v1';
+const LEVEL_KEY = 'naiwa.level.v1';
+
+export function saveShelters(list: SavedShelter[]) {
+  platform.save(SHELTER_KEY, list);
+}
+
+/** 读不到（比如看广告跳过了第一关、或者一个庇护所都没盖）时，给一个 4 块砖围一格的最小庇护所 */
+export function loadShelters(): SavedShelter[] {
+  const list = platform.load<SavedShelter[]>(SHELTER_KEY, []);
+  return list.length ? list : [{ walls: [[1, 0], [0, 1], [2, 1], [1, 2]], inner: [[1, 1]] }];
+}
+
+/** 玩家等级：第一关 Lv.1 奶蛋，过关后 Lv.2 小奶蛙 */
+export function loadLevel(): number {
+  return platform.load<number>(LEVEL_KEY, 1);
+}
+export function saveLevel(lv: number) {
+  platform.save(LEVEL_KEY, Math.max(lv, loadLevel()));
+}

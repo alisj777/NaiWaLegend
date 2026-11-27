@@ -54,4 +54,34 @@ export const STORY = {
   },
 } as const;
 
-export type StoryPanelId = (typeof STORY.panels)[number]['id'];
+/**
+ * 第二章开头的剧情（第一关过关后播放），播完进入第二关「天雷已废废」。
+ * 写法和序章一样：title 标题，text 正文（可以写成数组分段）。
+ */
+export const STORY_CH2 = {
+  finish: '进入第二关',
+  panels: [
+    {
+      id: 'ch2_school',
+      title: '奶家学院',
+      text: '阴暗天雷来了！\n这一世，天雷来得比上一世更早……',
+    },
+    {
+      id: 'ch2_strike',
+      title: '天雷降临',
+      text: '天雷劈中了村民，奶鸡和小奶蛙一个个被感染，\n身上慢慢泛起暗紫色……',
+    },
+    {
+      id: 'ch2_madness',
+      title: '阴暗病毒',
+      text: '感染阴暗病毒的村民变得郁郁寡欢，或者非常暴躁，\n有的甚至产生幻觉，开始攻击同类。',
+    },
+    {
+      id: 'ch2_think',
+      title: '苟住',
+      text: '但此时你的力量太小。\n先苟住，躲开天雷，然后想办法……',
+    },
+  ],
+} as const;
+
+export type StoryPanelId = (typeof STORY.panels)[number]['id'] | (typeof STORY_CH2.panels)[number]['id'];
