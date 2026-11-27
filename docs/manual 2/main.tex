@@ -1,0 +1,507 @@
+% 奶蛙家族 · 游戏设计手册
+% 编译：Overleaf 菜单 → Compiler 选 XeLaTeX（中文需要）
+% 图片都在「项目demo图片」文件夹；带【截图占位】的框，把同名截图上传到这个文件夹就会自动替换
+\documentclass[11pt,a4paper]{ctexart}
+
+\usepackage[margin=2.2cm]{geometry}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{caption}
+\usepackage[hidelinks]{hyperref}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+
+\definecolor{milk}{HTML}{C0601A}
+\definecolor{dark}{HTML}{6A3EA1}
+\definecolor{soft}{HTML}{8A6A40}
+\titleformat{\section}{\Large\bfseries\color{milk}}{\thesection}{1em}{}
+\titleformat{\subsection}{\large\bfseries\color{soft}}{\thesubsection}{1em}{}
+\setlist{itemsep=2pt,topsep=4pt}
+\captionsetup{font=small,labelfont=bf}
+\renewcommand{\arraystretch}{1.25}
+
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{\small 奶蛙家族 · 游戏设计手册}
+\rhead{\small \thepage}
+
+\graphicspath{{项目demo图片/}}
+
+% \demo[宽度]{文件名}{图注}：有图就放图，没有就画一个占位框（写着该放哪个文件）
+\newcommand{\demo}[3][0.85\linewidth]{%
+  \begin{figure}[H]\centering
+  \IfFileExists{项目demo图片/#2}{\includegraphics[width=#1]{#2}}{%
+    \fbox{\parbox[c][4.2cm][c]{#1}{\centering\color{soft}【截图占位】\\[4pt]
+    上传到 \texttt{项目demo图片/\detokenize{#2}}}}}
+  \caption{#3}
+  \end{figure}}
+
+% \tile{宽度}{文件名}{小标题}：并排的小图（放在一个 figure 里用）
+\newcommand{\tile}[3]{%
+  \begin{minipage}[t]{#1}\centering
+  \IfFileExists{项目demo图片/#2}{\includegraphics[width=\linewidth,height=3.4cm,keepaspectratio]{#2}}{%
+    \fbox{\parbox[c][3.2cm][c]{0.92\linewidth}{\centering\scriptsize 【占位】\\\texttt{\detokenize{#2}}}}}\\[2pt]
+  {\small #3}
+  \end{minipage}}
+
+\newcommand{\hl}[1]{\textbf{\color{milk}#1}}
+
+\begin{document}
+
+% ───────────────────────── 封面 ─────────────────────────
+\begin{titlepage}
+  \centering
+  \vspace*{1.2cm}
+  {\Huge\bfseries\color{milk} 奶蛙家族\par}
+  \vspace{0.4cm}
+  {\LARGE 重生之奶娃传奇：拯救奶家村\par}
+  \vspace{0.5cm}
+  {\large 游戏设计手册 · 产品视角\par}
+  \vspace{0.8cm}
+  \IfFileExists{项目demo图片/story_family.jpg}{\includegraphics[width=0.82\linewidth]{story_family.jpg}}{}
+  \vspace{0.8cm}
+
+  {\large 网页休闲对战游戏（移动端横屏优先，规划迁移至微信小游戏）\par}
+  \vspace{0.3cm}
+  {\normalsize 技术栈：Phaser 3 + TypeScript + Vite\quad|\quad AI 协作开发\par}
+  \vfill
+  {\small 版本：\today\par}
+\end{titlepage}
+
+\tableofcontents
+\newpage
+
+% ───────────────────────── 1 项目概述 ─────────────────────────
+\section{项目概述}
+
+\subsection{一句话定位}
+一款\hl{"重生 + 成长"叙事驱动的轻量对战小游戏}：玩家从一颗奶蛋重生，随着章节推进成长为奶蛙、分化出阵营，最终在"西格玛决斗"中决定奶家村的命运。每一章都是一种不同的玩法，章与章之间的成果（庇护所、物资、救下的奶蛋、阵营结果）会一路继承下去。
+
+\subsection{基本信息}
+\begin{center}
+\begin{tabularx}{\linewidth}{>{\bfseries}l X}
+\toprule
+类型 & 休闲对战 / 生存建造 / 阵营对抗 / 1v1 决斗（每章一种玩法） \\
+平台 & 网页（手机横屏优先，兼容电脑），平台层已为微信小游戏预留接口 \\
+单局时长 & 2～4 分钟（第一关 4 分钟、第二关 2 分钟、第三章 3 分钟、第四章 1 分钟） \\
+操作 & 左手虚拟摇杆 + 右手技能键；部分玩法用点击瞄准、滑杆 \\
+目标用户 & 喜欢可爱画风、碎片时间游玩、愿意分享"梗"内容的年轻玩家 \\
+技术 & Phaser 3.80 + TypeScript + Vite，纯静态部署 \\
+生产方式 & 代码：Claude Code；美术：Midjourney V8.2；音效：MiniMax；背景音乐：可商用曲库 \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\subsection{产品目标}
+\begin{enumerate}
+  \item \hl{低门槛、强记忆点}：一个摇杆加一个技能键就能玩；角色和台词有"梗感"（"还好我是正太"、"众宾桀桀桀"）。
+  \item \hl{每章一种新玩法}：避免单一玩法疲劳，同时用"成长等级"和"继承系统"把各章串成一条完整的成长线。
+  \item \hl{内置社交传播点}：成就卡牌可一键转发，隐藏彩蛋（"串子"）天然适合玩家之间口口相传。
+  \item \hl{验证 AI 协作开发流程}：从策划文案、数值、代码到美术、音效，全流程用 AI 工具完成并可复用。
+\end{enumerate}
+
+\demo{shot_menu.png}{首页：村子背景、大标题、各章节入口与成就按钮}
+
+% ───────────────────────── 2 世界观与剧情 ─────────────────────────
+\section{世界观与剧情}
+
+\subsection{故事背景}
+遥远的奶家村里生活着幸福的奶家人，\hl{大笑是奶家村幸福的秘诀}。主角从一颗小奶蛋长成小奶蛙、奶蛙；成年那天，朋友们各自分化成奶鸡、奶狗、奶鼠、奶粉……
+
+然而末世来临：极寒笼罩村庄，阴暗病毒伴随天雷来袭，族人一个个被感染，奶家村失去了欢笑。主角在寒冬中闭上了眼睛——再睁眼时，\hl{重生回到了末世降临前一夜}，变回一颗刚出生的奶蛋。一个"系统"出现在眼前：拯救奶家村，恢复众宾欢也的场景，就能获得奶运之子大礼包。
+
+\begin{figure}[H]\centering
+\tile{0.24\linewidth}{story_village.jpg}{奶家村}\hfill
+\tile{0.24\linewidth}{story_growth.jpg}{成长之路}\hfill
+\tile{0.24\linewidth}{story_doom.jpg}{末世}\hfill
+\tile{0.24\linewidth}{story_rebirth.jpg}{重生}
+\caption{序章剧情插画（节选）}
+\end{figure}
+
+\begin{figure}[H]\centering
+\tile{0.24\linewidth}{story_laugh.jpg}{大笑是幸福的秘诀}\hfill
+\tile{0.24\linewidth}{story_split.jpg}{分化}\hfill
+\tile{0.24\linewidth}{story_winter.jpg}{寒冬}\hfill
+\tile{0.24\linewidth}{char_system.jpg}{系统（引导角色）}\\[6pt]
+\tile{0.24\linewidth}{story_ch2_school.jpg}{奶家学院}\hfill
+\tile{0.24\linewidth}{story_ch2_strike.jpg}{天雷降临}\hfill
+\tile{0.24\linewidth}{story_ch2_madness.jpg}{阴暗病毒}\hfill
+\tile{0.24\linewidth}{story_ch2_think.jpg}{苟住}
+\caption{序章与第二章剧情插画；"系统"会在每章开头飘进来做引导}
+\end{figure}
+
+\subsection{成长等级与章节结构}
+玩家的成长等级就是章节进度，每一级对应一个新的身体形态和新的能力：
+
+\begin{center}
+\begin{tabularx}{\linewidth}{l l l X}
+\toprule
+等级 & 形态 & 章节 & 核心玩法 \\
+\midrule
+—   & 奶蛋（重生） & 序章 & 剧情：奶家村、末世、重生，系统登场 \\
+Lv.1 & 奶蛋 & 第一关 · 狂风夜 & 建造庇护所、抢物资、躲狂风（3 人竞争，淘汰 1 人） \\
+Lv.2 & 小奶蛙 & 第二关 · 天雷已废废 & 生存：躲天雷、手拉手组"奶三角"撞飞阴暗生物、抓手救蛋 \\
+Lv.3 & 分化期 & 第三章 · 分化 & 5 对 3 阵营对抗，五种角色，被天雷劈中会黑化换阵营 \\
+西格玛斗士 & 西格玛奶蛙 & 第四章 · 终极决斗 & 1 对 1：射肚脐 vs 扭腰躲针，决定结局 \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\subsection{两种结局}
+\begin{itemize}
+  \item \hl{拯救奶家村}（奶家军获胜）："系统奖励到账！"——奶家村恢复往日风光，众宾欢也；但在欢笑声中，你总感觉有一双眼睛在暗处盯着你……（为续作留钩子）
+  \item \textbf{\color{dark}很会扭啊}（暗派获胜）：整个村子被占领，众宾桀桀桀。
+\end{itemize}
+
+\begin{figure}[H]\centering
+\tile{0.24\linewidth}{end_celebrate.jpg}{众宾欢也}\hfill
+\tile{0.24\linewidth}{end_eyes.jpg}{暗处的眼睛}\hfill
+\tile{0.24\linewidth}{end_occupied.jpg}{村子被占领}\hfill
+\tile{0.24\linewidth}{end_jiejie.jpg}{众宾桀桀桀}
+\caption{第四章两种结局的插画}
+\end{figure}
+
+% ───────────────────────── 3 美术与音频风格 ─────────────────────────
+\section{美术与音频风格}
+
+\subsection{视觉基调}
+\begin{itemize}
+  \item \hl{软陶 3D 质感}（soft matte clay render）：圆滚滚、无棱角，像手捏的黏土玩具，降低"对战"的攻击感。
+  \item \hl{双色阵营}：奶家阵营是奶黄 / 奶油色 + 绿色圆眼睛；阴暗阵营是深茄紫皮肤 + 发光的紫色裂纹 + 淡紫雾气。一眼就能分清敌我。
+  \item \hl{反差萌}：可爱的奶蛙也能变成满身肌肉的"西格玛"，制造梗感和记忆点。
+  \item UI 采用卷轴、木质按钮、奶油色面板，标题字体为阿里妈妈方圆体。
+\end{itemize}
+
+\begin{figure}[H]\centering
+\tile{0.31\linewidth}{ui_scroll.jpg}{卷轴面板}\hfill
+\tile{0.31\linewidth}{ui_button.jpg}{木质按钮}\hfill
+\tile{0.31\linewidth}{ui_field.jpg}{场地}
+\caption{UI 与场地素材}
+\end{figure}
+
+\begin{figure}[H]\centering
+\tile{0.19\linewidth}{char_egg.jpg}{奶蛋}\hfill
+\tile{0.19\linewidth}{char_froglet.jpg}{小奶蛙}\hfill
+\tile{0.19\linewidth}{char_frog.jpg}{奶蛙}\hfill
+\tile{0.19\linewidth}{char_sigma.jpg}{西格玛奶蛙}\hfill
+\tile{0.19\linewidth}{dark_frog.jpg}{阴暗奶蛙}
+\caption{主角的成长形态与阴暗版}
+\end{figure}
+
+\subsection{美术生产流程（AI 协作）}
+\begin{enumerate}
+  \item \textbf{写提示词}：按"同一角色 + 动作 + 统一材质与配色 + 纯色背景 + 参数在最后"的模板写 Midjourney 提示词。
+  \item \textbf{保持一致}：Midjourney V8.2 不支持角色参考参数，改用 Edit 模型附参考图（如已定稿的四视图），保证同一角色在不同图里长得一样。
+  \item \textbf{四视图 / 动作图}：角色出 2×2 四视图（正面、背面、左、右），由脚本自动切成四张走路朝向图。
+  \item \textbf{自动处理}：自研脚本 \texttt{tools/prepare\_assets.py} 统一完成去底（白底泛洪、被包围的白色区域、脚下阴影）、发光素材去黑底、缩放、序列帧合成、音频转码。新图放进参考目录跑一次脚本即可进游戏。
+  \item \textbf{只归档定稿}：参考目录只保留通过的定稿图，失败的候选图不入库。
+\end{enumerate}
+
+\subsection{音频}
+\begin{itemize}
+  \item 背景音乐按场景切换（欢快、末世、重生、第一关、第四章对决），切换时淡入淡出；同一首曲子跨场景时接着播放，不会从头开始。
+  \item \hl{结算音乐}只放一遍：第三章第一次解锁"超能串子"、第四章第一次解锁"超级串子"、第四章奶家军胜利各有一段，播放时背景音乐自动压低。
+  \item 音效：全家福多人大笑、暗派结局"桀桀桀"反派大笑（MiniMax 生成）。
+  \item 背景音乐来自可商用曲库，部分做了变速处理；上线前需逐条核对授权条款（是否允许修改、是否覆盖游戏 / 小程序发布、是否要求署名）。
+\end{itemize}
+
+% ───────────────────────── 4 关卡设计 ─────────────────────────
+\section{关卡设计}
+
+\subsection{第一关 · 狂风夜（Lv.1 奶蛋）}
+\textbf{核心循环}：捡砖 → 围出闭合的庇护所 → 把物资搬进庇护所 → 躲狂风 → 结束时按物资得分排名。
+
+\begin{itemize}
+  \item 3 个奶蛋（你 + 2 个电脑）同场，\hl{4 分钟}后按分数排名，最后 1 名淘汰。
+  \item \textbf{庇护所}：用砖块上下左右围住空格就算闭合，闭合后砖墙变形态并挂上"奶X蛋庇护所"名牌。
+  \item \textbf{物资}：空瓶 1 分、满瓶 3 分；举着空瓶走到灵泉旁会自动装满（奶茶或奶瓶）。灵泉在第 20、50、80、110 秒各出现 10 秒，屏幕边缘有箭头指向。
+  \item \textbf{狂风}：第 10 秒起每 30 秒一波，每波 3 股；被卷起会被扔开，小概率扔出场外直接出局。
+  \item \textbf{铁锹}：别人的砖没闭合可以直接捡走；已闭合的要用铁锹挖。
+  \item \textbf{彩蛋}：把别人围在你的闭合庇护所里，对方就被"囚禁"。
+\end{itemize}
+
+\begin{figure}[H]\centering
+\tile{0.16\linewidth}{item_brick.jpg}{砖块}\hfill
+\tile{0.16\linewidth}{item_shelter.jpg}{庇护所}\hfill
+\tile{0.16\linewidth}{item_spring.jpg}{灵泉}\hfill
+\tile{0.16\linewidth}{item_bottle_tea.jpg}{奶茶 / 奶瓶}\hfill
+\tile{0.16\linewidth}{item_shovel.jpg}{铁锹}\hfill
+\tile{0.16\linewidth}{item_wind.jpg}{狂风}
+\caption{第一关的道具}
+\end{figure}
+
+\demo{shot_stage1.png}{第一关实机：镜头跟随放大、虚线框提示可放砖的位置、灵泉方向箭头}
+
+\subsection{第二关 · 天雷已废废（Lv.2 小奶蛙）}
+\textbf{核心循环}：放置继承来的庇护所 → 躲天雷 → 找伙伴手拉手组成奶三角 → 撞飞阴暗生物、用抓手救奶蛋。
+
+\begin{itemize}
+  \item \textbf{开局继承}：第一关闭合的庇护所按闭合先后顺序依次放到场上，物资作为库存继承。
+  \item \textbf{天雷}：每 8 秒一波、每波 5 道，劈中 3×3 范围，落下前 1.5 秒预警；闭合庇护所里安全。被劈中 3 次夭折。
+  \item \textbf{奶三角}：走到伙伴小奶蛙身边按"手拉手"，凑齐 2 只就组成奶三角绕你旋转，撞飞阴暗小奶蛙 4 格、阴暗奶鸡 2 格。
+  \item \textbf{奶蛋与炸弹}：阴暗奶鸡开场 50 秒内每 5 秒下一颗蛋；蛋被攻击 2 秒就感染，再过 3 秒爆炸（炸飞人、炸毁墙）。
+  \item \textbf{抓手}：点击 6 格内的奶蛋（黄色虚线框）把它抓回来，再点击自己庇护所里的空格（绿色虚线框）放进去；救下的蛋会带到第三章。
+  \item 坚持 \hl{2 分钟}，或提前把所有阴暗奶鸡撞出场外即过关。
+\end{itemize}
+
+\begin{figure}[H]\centering
+\tile{0.16\linewidth}{item_thunder.jpg}{天雷}\hfill
+\tile{0.16\linewidth}{item_triangle.jpg}{奶三角}\hfill
+\tile{0.16\linewidth}{dark_chicken.jpg}{阴暗奶鸡}\hfill
+\tile{0.16\linewidth}{dark_froglet.jpg}{阴暗小奶蛙}\hfill
+\tile{0.16\linewidth}{item_egg_bomb.jpg}{蛋炸弹}\hfill
+\tile{0.16\linewidth}{item_claw_open.jpg}{抓手}
+\caption{第二关的元素}
+\end{figure}
+
+\demo{shot_stage2.png}{第二关实机：天雷预警、奶三角、抓手瞄准框}
+
+\subsection{第三章 · 分化（Lv.3 分化期）}
+\textbf{核心循环}：随机分阵营 → 选角色 → 用角色技能攒金币、打倒敌人 → 躲天雷避免黑化 → 3 分钟后金币多的一方获胜。
+
+\paragraph{阵营与角色}
+奶家队 5 人 vs 暗派 3 人，玩家被随机分到一边（5/8 概率在奶家队），其余是电脑。每队至少有一个"攻击"、一个"奶"、一个"辅助"，奶粉每队最多 1 个。所有角色血量 20，倒下后复活（奶家队 6 秒，暗派人少、3 秒）。
+
+\begin{center}
+\begin{tabularx}{\linewidth}{l l X}
+\toprule
+角色 & 定位 & 技能 \\
+\midrule
+奶蛙 & 攻击 & 一只脚走路、一只脚踢人：2 格内都踢得到，伤害 2（暗派 6），踢退 1 格，冷却 1 秒 \\
+奶鸡 & 奶 & 奶家队下蛋→奶仆跟着奶蛙叫"主人"，每 10 秒给主人补 1 血；暗派下的是炸弹蛋（4 秒后爆炸，范围 2.5 格，伤害 9） \\
+奶狗 & 奶 / 经济 & 拉奶屎、吃奶屎回血；任何人捡满 3 个奶屎换 1 金币（主要金币来源） \\
+奶粉 & 辅助 & 迷惑：贴身让敌人眩晕 3 秒（不能动、不能放技能），冷却 12 秒 \\
+奶鼠 & 攻击 / 盗贼 & 跑得快（1.4 倍）；能从墙下钻进庇护所；偷奶仆、偷金币；3 秒啃掉一块砖 \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{figure}[H]\centering
+\tile{0.19\linewidth}{char_frog_kick.jpg}{奶蛙踢腿}\hfill
+\tile{0.19\linewidth}{char_chicken.jpg}{奶鸡}\hfill
+\tile{0.19\linewidth}{char_dog.jpg}{奶狗}\hfill
+\tile{0.19\linewidth}{char_powder.jpg}{奶粉}\hfill
+\tile{0.19\linewidth}{char_mouse.jpg}{奶鼠}\\[6pt]
+\tile{0.19\linewidth}{dark_frog.jpg}{暗·奶蛙}\hfill
+\tile{0.19\linewidth}{dark_chicken.jpg}{暗·奶鸡}\hfill
+\tile{0.19\linewidth}{dark_dog.jpg}{暗·奶狗}\hfill
+\tile{0.19\linewidth}{dark_powder.jpg}{暗·奶粉}\hfill
+\tile{0.19\linewidth}{dark_mouse.jpg}{暗·奶鼠}
+\caption{第三章五种角色（上：奶家队；下：暗派）}
+\end{figure}
+
+\begin{figure}[H]\centering
+\tile{0.19\linewidth}{char_poop.jpg}{奶屎}\hfill
+\tile{0.19\linewidth}{item_coin.jpg}{金币}\hfill
+\tile{0.19\linewidth}{item_bottle_milk.jpg}{奶瓶（育儿）}\hfill
+\tile{0.19\linewidth}{item_stun.jpg}{眩晕}\hfill
+\tile{0.19\linewidth}{item_hole.jpg}{奶鼠地洞}
+\caption{第三章的道具与特效}
+\end{figure}
+
+\paragraph{天雷与黑化}
+天雷每 5 秒一波，只对奶家队有作用。奶家队的人被劈中 3 次当场黑化、加入暗派；\hl{你本人被劈 3 次，或全队累计被劈 6 次，你也会黑化}——这一轮结束，开始新的一轮，你变成暗派。
+
+\paragraph{庇护所育儿（不写进引导，玩到才发现）}
+把奶仆点选后放进自己的庇护所：不会被攻击、不会被劈。奶蛋提出"想喝奶"，从第一关攒下的库存里喝掉一瓶后开始长大：1 分钟长成小奶蛙，再喝一瓶、再 1 分钟长成奶蛙。长成的奶蛙是\hl{主人的替身}：主人倒下时原地满血复活。
+
+\paragraph{隐藏彩蛋：串子}
+当你身在暗派，可以偷偷帮奶家队（不攻击、在奶家队旁边拉屎、炸弹不下在他们旁边）。如果奶家队赢了、而你这一轮一下都没伤到奶家队，就解锁隐藏彩蛋\hl{"超能串子"}。引导页只写"这一章藏着一个隐藏彩蛋"，不剧透。
+
+\demo{shot_stage3_pick.png}{选角色：恭喜成长到 Lv.3，随机分阵营后选择角色}
+\demo{shot_stage3_battle.png}{第三章实机：两队对抗、血条、天雷预警、奶仆与奶屎}
+
+\subsection{第四章 · 终极决斗（西格玛斗士）}
+\textbf{解锁}：第三章打出"奶家队赢 / 暗派赢 / 超能串子"之一，解锁终极决斗并获得西格玛皮肤。第三章的结果决定你在第四章站哪边：
+
+\begin{center}
+\begin{tabularx}{\linewidth}{l l X}
+\toprule
+第三章结果 & 第四章身份 & 目标 \\
+\midrule
+奶家队赢 & 奶家军（西格玛奶蛙） & 赢下决斗 → 拯救奶家村 \\
+暗派赢 & 暗派（阴暗西格玛） & 赢下决斗 → 很会扭啊 \\
+超能串子 & 暗派，继续当串子 & 故意输，让奶家军赢 → 拯救奶家村 + 超级串子 \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{itemize}
+  \item \textbf{奶家军}（提示语"以奶味净化雷霆之力！"）：点击屏幕发射解毒针，瞄准对面肚脐上的黄色虚线框；针飞过去要 0.55 秒，必须预判对手扭到哪。
+  \item \textbf{暗派}（提示语"还好我是正太"）：拖动底部滑杆左右扭腰躲针。
+  \item 60 秒、15 根针，射中肚脐 5 次奶家军获胜，否则暗派获胜；输了可以直接重打。
+\end{itemize}
+
+\begin{figure}[H]\centering
+\tile{0.19\linewidth}{sigma_shoot.jpg}{西格玛发射}\hfill
+\tile{0.19\linewidth}{item_needle.jpg}{解毒针}\hfill
+\tile{0.19\linewidth}{dark_sigma_idle.jpg}{暗西格玛}\hfill
+\tile{0.19\linewidth}{dark_sigma_twist.jpg}{扭腰躲针}\hfill
+\tile{0.19\linewidth}{dark_sigma_hit.jpg}{肚脐中针}
+\caption{第四章的角色状态（肚脐瞄准框会跟着扭腰图、翻转、中针图精确对齐）}
+\end{figure}
+
+\demo{shot_stage4.png}{第四章实机：准星、肚脐虚线框、解毒针飞行 / 暗派滑杆}
+
+% ───────────────────────── 5 成就与传播 ─────────────────────────
+\section{成就系统与社交传播}
+
+\begin{center}
+\begin{tabularx}{\linewidth}{l l X}
+\toprule
+成就 & 章节 & 条件 \\
+\midrule
+成长为西格玛奶蛙 & 第三章 & 开局就在奶家队（不是黑化过来的），奶家队获胜；之后首页的奶蛙换成西格玛形象 \\
+自我折磨 & 第三章 & 身在暗派，暗派获胜 \\
+超能串子（隐藏彩蛋） & 第三章 & 身在暗派，一下都没伤到奶家队，奶家队获胜 \\
+无法绷住 & 第三章 & 一局里复活 5 次以上（含替身原地复活） \\
+破绷者 & 第三章 & 一局里造成 200 点以上伤害 \\
+拯救奶家村 & 第四章 & 终极决斗中奶家军获胜 \\
+很会扭啊 & 第四章 & 终极决斗中暗派获胜 \\
+超级串子（隐藏彩蛋） & 第四章 & 继续当串子，让奶家军获胜（卡牌上的串子长了三倍） \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{itemize}
+  \item \hl{卡牌化}：带卡牌的成就以金框收藏卡呈现，成就名写在卡面横幅上，可一键"转发卡牌"（转发接口已对接平台层，微信小游戏中直接调用转发）。
+  \item \hl{隐藏彩蛋制造话题}：两个串子成就在成就页里只显示"隐藏彩蛋"，解锁时先弹"恭喜你解锁隐藏彩蛋！"并配专属结算音乐，鼓励玩家截图分享、互相打听。
+  \item \hl{反复游玩动机}：第三章可以无限"再来一局"，每局重新随机阵营，不同阵营对应不同成就，自然驱动多次游玩。
+\end{itemize}
+
+\begin{figure}[H]\centering
+\tile{0.22\linewidth}{card_mole.jpg}{超能串子}\hfill
+\tile{0.22\linewidth}{card_cant_hold.jpg}{无法绷住}\hfill
+\tile{0.22\linewidth}{card_breaker.jpg}{破绷者}\hfill
+\tile{0.22\linewidth}{card_mole_x3.jpg}{超级串子}
+\caption{成就卡牌}
+\end{figure}
+
+\begin{figure}[H]\centering
+\tile{0.3\linewidth}{char_sigma.jpg}{成长为西格玛奶蛙}\hspace{0.05\linewidth}
+\tile{0.3\linewidth}{achv_torment.jpg}{自我折磨}
+\caption{没有卡牌的成就用角色立绘展示}
+\end{figure}
+
+\demo[0.7\linewidth]{shot_achievement.png}{成就弹窗与成就页（两列展示，已解锁的可点开查看卡牌）}
+
+% ───────────────────────── 6 游戏 AI 设计 ─────────────────────────
+\section{游戏 AI 设计}
+
+\subsection{设计原则}
+\begin{itemize}
+  \item \textbf{像人，而不是像机器}：动作前有短暂停顿，有一定概率"没注意到"天雷，不会永远最优。
+  \item \textbf{有团队意识}：救队友、集火、撤退、跟随，但\hl{不扎堆}——跟随时停在 2 格外，挤在一起会主动散开。
+  \item \textbf{可调}：所有行为参数集中在数值配置里（思考间隔、追击距离、撤退血量、躲天雷概率等），策划改数字即可，不用改代码。
+\end{itemize}
+
+\subsection{第三章电脑的决策顺序}
+每次思考（0.4 秒一次）按优先级依次判断：
+\begin{enumerate}
+  \item \textbf{躲天雷}：奶家队站在预警范围里就走出去，走路时绕开预警区；每一波有 80\% 概率注意到（参数 \texttt{thunderDodge}），保证偶尔有人被劈黑化。
+  \item \textbf{撤退}：血量低于 35\% 就退回自家庇护所（除奶鼠外敌人进不去），否则躲到自家奶蛙身边。
+  \item \textbf{按角色分工}：
+    \begin{itemize}
+      \item 奶蛙：先救正在被贴身攻击的队友 → 再和队友集火同一个目标 → 再打最近的敌人；能踢到时先踢血少的。
+      \item 奶粉：去迷惑正在攻击队友的敌人，平时跟在自家奶蛙附近。
+      \item 奶鸡：奶家队跟着奶蛙下蛋（奶仆给奶蛙补血）；暗派去自家奶蛙正在打的那个人身边放炸弹。
+      \item 奶狗：在自家奶蛙身边拉屎（避免被对面捡走），顺路捡别人的奶屎。
+      \item 奶鼠：专找敌方奶仆偷，偷不到就偷金币、捡奶屎；被追时往队友那边跑。
+    \end{itemize}
+  \item \textbf{没事做}：满场走动，挑离队友都有距离的目标点。
+\end{enumerate}
+
+\subsection{其他章节的 AI}
+\begin{itemize}
+  \item \textbf{第一关对手}：捡砖、围庇护所、搬物资、去灵泉装瓶；庇护所建好后有一定概率拿铁锹去"抢劫"别人。
+  \item \textbf{第二关阴暗生物}：追击并攻击附近的伙伴和奶蛋；伙伴小奶蛙会闲逛，被感染后变成敌人。
+  \item \textbf{第四章对手}：电脑暗派平时随机扭动，看到针飞来有一定概率按反方向躲；电脑奶家军按玩家扭动的速度预判落点（带误差）。
+\end{itemize}
+
+% ───────────────────────── 7 数据驱动调平衡 ─────────────────────────
+\section{用模拟数据调平衡}
+
+规则层不依赖画面引擎，可以在命令行里让电脑对电脑\hl{批量跑几十到几百局}，用数据而不是感觉来调数值。几次关键调整：
+
+\begin{center}
+\begin{tabularx}{\linewidth}{>{\raggedright\arraybackslash}p{3.2cm} X X}
+\toprule
+问题 & 改动 & 模拟结果 \\
+\midrule
+第三章暗派太容易被团灭，一局 1 分钟就结束 & 暂时关闭"全员倒下提前获胜"，加长复活时间 & 每局打满 3 分钟，胜负接近五五开 \\
+电脑扎堆 & 满场走动、跟随停在 2 格外、挤在一起主动散开 & 4 人以上挤成一团的时间约 1～2\%；加入团队合作后，同队 3 人聚在一起约 30\%（打团时聚拢） \\
+奶家队很难赢 & 电脑学会躲天雷、绕开预警区；全员血量 20 & 每波天雷劈中奶家队从 0.29 次降到 0.05 次；奶家队胜负从 14:17 变为 46:14 \\
+黑化太少 & 电脑躲天雷改为 80\% 概率 & 你在奶家队开局时，约 40\% 的局会中途黑化进入串子轮 \\
+第四章决斗太难 / 太易 & 扫描针速、扭腰速度、肚脐判定半径 & 奶家军瞄准当前位置赢约 64\%；暗派慢半拍躲赢约 57\%；来回乱扭约 38\%；串子不动必输 \\
+成就门槛失真 & 按模拟出的伤害、复活分布重定门槛 & 无法绷住：复活 5 次；破绷者：伤害 200 \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+% ───────────────────────── 8 产品亮点 ─────────────────────────
+\section{产品亮点}
+
+\begin{enumerate}[leftmargin=*]
+  \item \hl{跨章节继承，成长感贯穿始终}\par
+  第一关的庇护所形状和物资 → 第二关开局放置、库存继承；第二关救下的奶蛋 → 第三章开局就是你的奶仆；第一关攒的奶瓶 → 第三章喂养庇护所里的奶蛋；第三章的结果 → 决定第四章站哪边。玩家前面的每一个选择都会在后面"兑现"。
+
+  \item \hl{阵营可以翻转，"串子"成为隐藏玩法}\par
+  被天雷劈黑化后，玩家从正派变成反派，并可以选择暗中帮助原来的队友。同一套规则下自然产生"演技"和"背叛"的戏剧性，且没有任何强制引导——完全由玩家自己发现。
+
+  \item \hl{每章一种玩法，降低疲劳}\par
+  建造竞争 → 生存躲避 → 阵营对抗 → 1v1 决斗，节奏由慢到快，单局 1～4 分钟，适合碎片时间。
+
+  \item \hl{社交裂变点内置在设计里}\par
+  成就卡牌一键转发、隐藏彩蛋专属卡牌和结算音乐、反差萌的西格玛形象与梗台词，都是天然的分享素材。
+
+  \item \hl{AI 全流程协作生产}\par
+  策划 → 数值 → 代码 → 美术 → 音效全程用 AI 工具完成：Claude Code 负责实现和模拟调平衡，Midjourney 产出角色与插画，MiniMax 产出音效；配合自研素材处理脚本，新素材从生成到进游戏只需几分钟。
+
+  \item \hl{策划友好的工程结构}\par
+  数值（\texttt{src/config/}）和文案（\texttt{src/copy/}）与代码分离，每个数字和每句话都有中文注释，标注了哪些是策划规定、哪些是实现时补充的；改平衡、改台词不需要懂代码。
+
+  \item \hl{为上线微信小游戏做好准备}\par
+  存档、全屏、震动、转发、看广告等平台能力都封装在平台层，迁移时只需替换实现。
+\end{enumerate}
+
+% ───────────────────────── 9 技术架构 ─────────────────────────
+\section{技术架构}
+
+\begin{center}
+\begin{tabularx}{\linewidth}{>{\ttfamily}l X}
+\toprule
+\normalfont 目录 & 内容 \\
+\midrule
+src/stage1..4/ & 各章规则（纯逻辑，不依赖画面），可在命令行里无界面模拟 \\
+src/scenes/ & 各章画面：渲染、输入、引导、结算；后面的章节继承前面的场景复用摇杆、镜头、提示 \\
+src/config/ & 各章数值（调平衡只改这里） \\
+src/copy/ & 各章全部文案（改字只改这里） \\
+src/battle/ & 通用 UI、摇杆、背景音乐、成就弹窗、系统引导角色 \\
+src/platform/ & 平台层：存档、全屏、转发、广告等（网页 / 微信小游戏） \\
+src/progress.ts & 存档：物资库存、庇护所、救下的奶蛋、等级、成就、第三章结果 \\
+tools/prepare\_assets.py & 素材流水线：去底、切四视图、发光去黑底、序列帧、音频转码 \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{itemize}
+  \item \textbf{移动端适配}：按屏幕实际比例铺满（不留黑边），处理刘海安全区；双镜头——场地镜头跟随玩家，界面镜头固定在屏幕上。
+  \item \textbf{稳定性}：开发模式下运行错误直接显示在屏幕上，方便在手机上排查；卡顿诊断只在开发模式开启。
+\end{itemize}
+
+% ───────────────────────── 10 后续规划 ─────────────────────────
+\section{后续规划}
+\begin{enumerate}
+  \item \textbf{上线微信小游戏}：完成平台层的微信实现，接入真实转发与激励广告。
+  \item \textbf{西格玛皮肤系统}：让"获得西格玛皮肤"在所有章节可用，扩展为皮肤收集。
+  \item \textbf{数据埋点}：记录各章通过率、阵营胜率、串子触发率、卡牌转发率，用真实玩家数据替代模拟数据调平衡。
+  \item \textbf{续作钩子}：结局中"暗处的那双眼睛"为下一章剧情留下伏笔。
+  \item \textbf{音乐授权}：上线前逐条核对背景音乐授权，并在游戏内加入音乐署名 / 致谢页。
+\end{enumerate}
+
+\end{document}
