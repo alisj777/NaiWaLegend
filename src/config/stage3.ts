@@ -29,8 +29,8 @@ export const STAGE3 = {
   teamHitsToTurn: 6,
   /** 结算成就的门槛 【补充】 */
   achieve: {
-    cantHold: 10, // 一局里复活（含替身原地复活）这么多次 → 无法绷住（模拟：暗派奶鼠一局中位 15 次，奶家队约 4 次）
-    breaker: 50, // 一局里造成这么多点伤害 → 破绷者（模拟：电脑暗派奶蛙一局两百多，暗派奶鸡十几）
+    cantHold: 5, // 一局里复活（含替身原地复活）这么多次 → 无法绷住（血量 20 后：一局中位 1～2 次，最多十来次）
+    breaker: 200, // 一局里造成这么多点伤害 → 破绷者（模拟：电脑奶家队奶蛙一局中位 180，暗派奶蛙近 500，暗派奶鸡约 45）
   },
   /** 打倒一个敌人得几个金币 【补充】 */
   killGold: 1,
@@ -47,9 +47,12 @@ export const STAGE3 = {
   /** 电脑：思考间隔、多远开始追 / 逃、速度（相对角色本身） 【补充】 */
   /**
    * chase：奶蛙看到多近的敌人才去追（远了就满场走动，不扎堆）；flee：敌方奶蛙多近时其他角色跑开；
-   * roamPick：每次思考时换一个闲逛目标的概率
+   * roamPick：每次思考时换一个闲逛目标的概率；
+   * assist：奶蛙多远内会去救被贴身的队友 / 跟队友集火；escortRange：敌人离自家奶蛙这么近时，辅助角色靠过去；
+   * retreatHp：血量低于这个比例就撤回庇护所 / 自家奶蛙身边；
+   * thunderDodge：每一波天雷，电脑注意到并躲开的概率（1 = 每次都躲，几乎没人会黑化）
    */
-  ai: { think: 0.4, chase: 5, flee: 3, speed: 0.85, roamPick: 0.04 },
+  ai: { think: 0.4, chase: 5, flee: 3, speed: 0.85, roamPick: 0.04, assist: 8, escortRange: 4, retreatHp: 0.35, thunderDodge: 0.8 },
 
   /** 天雷保留，但比第二关稀 【补充】 */
   thunder: {
@@ -63,22 +66,22 @@ export const STAGE3 = {
     damage: { frog: 1, chicken: 0.5, dog: 0.5, mouse: 0.7, powder: 0.7 },
   },
 
-  /** 各角色：血量、移动速度（相对第一关的你）、技能 */
+  /** 各角色：血量（全部 20，原来 3～8 太容易倒）、移动速度（相对第一关的你）、技能 */
   roles: {
     /** 主攻：一只脚走路，一只脚踢人 */
-    frog: { hp: 8, speed: 1, kick: { damage: 2, darkDamage: 4 /* 暗派奶蛙踢得更狠（双倍） */, push: 1, cooldown: 1, range: 2 /* 2 格内（含斜角）都踢得到 */ } },
+    frog: { hp: 20, speed: 1, kick: { damage: 2, darkDamage: 6 /* 暗派奶蛙踢得更狠（原来的双倍 4，再调到 1.5 倍） */, push: 1, cooldown: 1, range: 2 /* 2 格内（含斜角）都踢得到 */ } },
     /**
      * 奶妈：奶家队的奶鸡下蛋 → 奶仆（还是奶蛋的样子）跟着己方奶蛙叫"主人"，定时给主人补血；
      * 暗派的奶鸡下的是炸弹蛋，下在奶家队旁边，bombAfter 秒后爆炸 【补充】
      */
-    chicken: { hp: 5, speed: 0.9, layEvery: 8, bombAfter: 4, bombRadius: 2.5, bombDamage: 6 /* 原 3，双倍 */ },
+    chicken: { hp: 20, speed: 0.9, layEvery: 8, bombAfter: 4, bombRadius: 2.5, bombDamage: 9 /* 原 3 → 双倍 6 → 再 1.5 倍 */ },
     /** 经济：产奶屎，也吃奶屎回血；3 个奶屎换 1 金币，谁捡到算谁的 */
-    dog: { hp: 5, speed: 1, poopEvery: 6, eatHeal: 1 /* 【补充】 */, poopPerGold: 3, maxPoops: 14 /* 场上最多几坨【补充】 */ },
+    dog: { hp: 20, speed: 1, poopEvery: 6, eatHeal: 1 /* 【补充】 */, poopPerGold: 3, maxPoops: 14 /* 场上最多几坨【补充】 */ },
     /** 控制：迷惑 → 对方眩晕，不能移动、不能放技能 */
-    powder: { hp: 4, speed: 1, stun: { range: 1, duration: 3, cooldown: 12 } /* range 1 = 只有贴身（含斜角）才能迷惑 */ /* range、cooldown【补充】 */ },
+    powder: { hp: 20, speed: 1, stun: { range: 1, duration: 3, cooldown: 12 } /* range 1 = 只有贴身（含斜角）才能迷惑 */ /* range、cooldown【补充】 */ },
     /** 盗贼：跑得快，能从墙下钻进庇护所，偷蛋 / 奶屎 / 金币，啃砖 */
     /** 偷奶仆冷却 stealCooldown，偷金币冷却 goldCooldown、一次偷 stealGold 个 【补充】；钻墙、啃砖等第 3 步有庇护所后再做 */
-    mouse: { hp: 3, speed: 1.4, gnaw: 3, stealCooldown: 2, goldCooldown: 6, stealGold: 1 },
+    mouse: { hp: 20, speed: 1.4, gnaw: 3, stealCooldown: 2, goldCooldown: 6, stealGold: 1 },
   },
 
   /** 奶仆：奶鸡下的蛋孵出来，跟着主人（己方奶蛙） */

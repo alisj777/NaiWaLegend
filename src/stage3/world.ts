@@ -62,6 +62,8 @@ export interface Fighter {
   roam: { x: number; y: number } | null;
   /** 奶鼠：偷金币的冷却（偷奶仆用 readyAt） */
   goldReadyAt: number;
+  /** 电脑：这一波天雷有没有注意到（没注意到就不躲） */
+  seesThunder: boolean;
   /** 奶鼠：正在啃的砖（格子编号）和啃完的时刻 */
   gnaw: { i: number; until: number } | null;
 }
@@ -210,7 +212,7 @@ export class Stage3World extends World {
         const a = this.addActor({ id: this.actors.length, name, human, cx: x, cy: y, speed: C.roles[role].speed * (human ? 1 : C.ai.speed) });
         a.facing = team === 'good' ? 'right' : 'left';
         const hp = C.roles[role].hp;
-        this.fighters.set(a.id, { role, team, hp, maxHp: hp, readyAt: 0, kickUntil: 0, downUntil: 0, stunUntil: 0, hits: 0, thinkAt: Math.random() * 0.5, path: [], roam: null, goldReadyAt: 0, gnaw: null });
+        this.fighters.set(a.id, { role, team, hp, maxHp: hp, readyAt: 0, kickUntil: 0, downUntil: 0, stunUntil: 0, hits: 0, thinkAt: Math.random() * 0.5, path: [], roam: null, goldReadyAt: 0, gnaw: null, seesThunder: true });
       });
     }
   }
@@ -717,6 +719,8 @@ export class Stage3World extends World {
         if (tile) this.thunders.push({ id: ++this.seq, x: tile.x, y: tile.y, at: this.t + T.warnTime });
       }
       this.events3.push({ type: 'thunderWave' });
+      // 每个电脑角色这一波有一定概率没注意到天雷（不躲），这样才会有人被劈黑化
+      for (const f of this.fighters.values()) f.seesThunder = Math.random() < C.ai.thunderDodge;
     }
     for (const th of this.thunders.filter((q) => this.t >= q.at)) this.strike(th);
     this.thunders = this.thunders.filter((q) => this.t < q.at);
@@ -861,74 +865,163 @@ export class Stage3World extends World {
 
   // ───────── 电脑 ─────────
 
+  /** 每队奶蛙一起打的目标（集火） */
+  private focus: Record<Team, number> = { good: -1, dark: -1 };
+
+  private inThunder(x: number, y: number) {
+    const R = C.thunder.radius;
+    return this.thunders.some((th) => Math.abs(x - th.x) <= R && Math.abs(y - th.y) <= R);
+  }
+
+  /** 离开天雷预警范围：找最近的安全格子走过去 */
+  private dodgeThunder(a: Actor, f: Fighter) {
+    let best: { x: number; y: number } | null = null;
+    let bd = Infinity;
+    for (let y = Math.max(0, a.cy - 4); y <= Math.min(this.rows - 1, a.cy + 4); y++)
+      for (let x = Math.max(0, a.cx - 4); x <= Math.min(this.cols - 1, a.cx + 4); x++) {
+        if (this.inThunder(x, y) || !this.passable(a, x, y)) continue;
+        // 闭合庇护所里本来就安全
+        const d = Math.abs(x - a.cx) + Math.abs(y - a.cy) - (this.inShelter(f.team, this.idx(x, y)) ? 2 : 0);
+        if (d < bd) (bd = d), (best = { x, y });
+      }
+    if (best) this.goExact(a, f, best.x, best.y);
+  }
+
+  /** 正在被敌人贴身威胁的队友（离它最近的敌人在 2 格内），按血量从少到多 */
+  private alliesInDanger(team: Team) {
+    const out: { ally: Actor; foe: Actor }[] = [];
+    for (const ally of this.standing(team)) {
+      let foe: Actor | null = null;
+      let fd = 2.5;
+      for (const e of this.standing(team === 'good' ? 'dark' : 'good')) {
+        const d = Math.hypot(e.cx - ally.cx, e.cy - ally.cy);
+        if (d < fd) (fd = d), (foe = e);
+      }
+      if (foe) out.push({ ally, foe });
+    }
+    return out.sort((p, q) => this.f(p.ally).hp / this.f(p.ally).maxHp - this.f(q.ally).hp / this.f(q.ally).maxHp);
+  }
+
+  /** 撤退：去自己队庇护所里（奶鼠以外的敌人进不去），没有就去自家奶蛙身边 */
+  private retreat(a: Actor, f: Fighter, leader: Actor | null) {
+    let best: { x: number; y: number } | null = null;
+    let bd = Infinity;
+    for (let i = 0; i < this.interior.length; i++) {
+      if (!this.inShelter(f.team, i) || this.walls[i] !== -1) continue;
+      const x = i % this.cols;
+      const y = (i / this.cols) | 0;
+      const d = Math.abs(x - a.cx) + Math.abs(y - a.cy);
+      if (d < bd) (bd = d), (best = { x, y });
+    }
+    if (best && bd <= 14) return this.goExact(a, f, best.x, best.y);
+    if (leader && leader !== a) return this.goNear(a, f, leader.cx, leader.cy);
+    this.roam(a, f);
+  }
+
   /**
-   * 电脑：
-   *   奶蛙：追最近的敌人，贴身就踢
-   *   奶鸡：奶家队在自家奶蛙身边下蛋；暗派摸到奶家队身边下炸弹
-   *   奶狗：在自家奶蛙身边拉屎，顺路捡别人的奶屎
-   *   奶粉：敌人进范围就迷惑，冷却好了会主动靠近敌方奶蛙
-   *   奶鼠：找敌方奶仆偷，偷不到就偷金币、捡奶屎
-   * 除了奶蛙，敌方奶蛙靠近时都会先跑开（奶粉技能好了时除外）
+   * 电脑（有团队意识）。每次思考按顺序：
+   *   1. 奶家队躲天雷：站在预警范围里就走出去
+   *   2. 血少（< retreatHp）就撤回庇护所 / 自家奶蛙身边
+   *   3. 奶蛙：先救被敌人贴身的队友，其次和队友集火同一个目标，再其次打最近的
+   *      奶粉：去迷惑正在打队友的敌人；奶鸡、奶狗、奶鼠按各自的活，敌人靠近时跟着自家奶蛙
+   *   4. 没事做：满场走动（不扎堆）
    */
   private think(a: Actor) {
     const f = this.f(a);
-    if (f.downUntil || this.isStunned(a) || this.isBusy(a)) return;
-    if (this.t < f.thinkAt && f.path.length) return this.walkPath(a, f);
+    if (f.downUntil || this.isStunned(a) || this.isBusy(a) || f.gnaw) return;
+    // 天雷预警一出现就马上反应，不等下一次思考
+    const zoned = f.team === 'good' && f.seesThunder && this.inThunder(a.cx, a.cy);
+    if (this.t < f.thinkAt && f.path.length && !zoned) return this.walkPath(a, f);
     f.thinkAt = this.t + C.ai.think;
     const foes = this.enemies(a);
     const dist = (b: { cx: number; cy: number }) => Math.hypot(b.cx - a.cx, b.cy - a.cy);
     const near = <T extends { cx: number; cy: number }>(list: T[]) => list.sort((p, q) => dist(p) - dist(q))[0];
     const ready = this.t >= f.readyAt;
     const leader = this.masterOf(f.team, a.cx, a.cy);
-    const byLeader = leader && leader !== a && this.cheb(a.cx, a.cy, leader.cx, leader.cy) <= 2;
+    // 离自家奶蛙 3 格内就算"在身边"（不用贴着，免得挤成一团）
+    const byLeader = leader && leader !== a && this.cheb(a.cx, a.cy, leader.cx, leader.cy) <= 3;
+    const danger = this.alliesInDanger(f.team).filter((d) => d.ally !== a);
+
+    // 1. 躲天雷（天雷只劈奶家队）
+    if (zoned) return this.dodgeThunder(a, f);
+    // 2. 血少撤退（奶蛙被贴身时先打完这一下）
+    const low = f.hp / f.maxHp < C.ai.retreatHp;
+    if (low && !(f.role === 'frog' && foes.some((b) => this.cheb(a.cx, a.cy, b.cx, b.cy) <= C.roles.frog.kick.range && ready))) return this.retreat(a, f, leader);
 
     if (f.role === 'frog') {
-      const target = near(foes);
-      if (!target) return this.roam(a, f);
-      if (this.cheb(a.cx, a.cy, target.cx, target.cy) <= C.roles.frog.kick.range) {
+      const inKick = (b: Actor) => this.cheb(a.cx, a.cy, b.cx, b.cy) <= C.roles.frog.kick.range;
+      // 能踢到就踢（优先踢集火目标、血少的）
+      const kickable = foes.filter(inKick).sort((p, q) => (p.id === this.focus[f.team] ? -1 : 0) - (q.id === this.focus[f.team] ? -1 : 0) || this.f(p).hp - this.f(q).hp);
+      if (kickable.length) {
         this.stop(a, f);
+        this.focus[f.team] = kickable[0].id;
         if (ready) this.kick(a);
         return;
       }
-      if (dist(target) > C.ai.chase) return this.roam(a, f);
+      // 踢不到人、又和队友挤在一起：先散开
+      if (this.spreadOut(a, f)) return;
+      // 救队友 → 集火目标 → 最近的敌人
+      const rescue = danger.find((d) => dist(d.foe) <= C.ai.assist)?.foe;
+      const focused = foes.find((b) => b.id === this.focus[f.team] && dist(b) <= C.ai.assist);
+      const target = rescue ?? focused ?? near(foes.filter((b) => dist(b) <= C.ai.chase));
+      if (!target) return this.roam(a, f);
+      this.focus[f.team] = target.id;
       return this.goTo(a, f, target.cx, target.cy);
     }
 
     const threat = near(foes.filter((b) => this.f(b).role === 'frog' && dist(b) <= C.ai.flee));
-    if (threat && !(f.role === 'powder' && ready)) return this.flee(a, threat);
+    // 敌方奶蛙贴近：往自家奶蛙那边跑（有队友保护），没有奶蛙就往远处跑
+    if (threat && !(f.role === 'powder' && ready)) {
+      if (leader && leader !== a && Math.hypot(leader.cx - threat.cx, leader.cy - threat.cy) > 1.5) return this.goNear(a, f, leader.cx, leader.cy);
+      return this.flee(a, threat);
+    }
+    // 和队友挤成一团了就先散开
+    if (this.spreadOut(a, f)) return;
+    // 敌人在自家奶蛙附近：辅助角色靠过去（3 格内），一起打
+    const escort = leader && leader !== a && foes.some((b) => Math.hypot(b.cx - leader.cx, b.cy - leader.cy) <= C.ai.escortRange);
+    const goEscort = () => {
+      if (!escort || byLeader) return false;
+      this.goNear(a, f, leader!.cx, leader!.cy);
+      return true;
+    };
 
     switch (f.role) {
+      case 'powder': {
+        if (ready) {
+          if (foes.some((b) => this.cheb(a.cx, a.cy, b.cx, b.cy) <= C.roles.powder.stun.range)) return this.stop(a, f), void this.stun(a);
+          // 去迷惑正在打队友的敌人，其次是敌方奶蛙
+          const mark = danger.find((d) => dist(d.foe) <= 8)?.foe ?? near(foes.filter((b) => this.f(b).role === 'frog' && dist(b) <= 6));
+          if (mark) return this.goTo(a, f, mark.cx, mark.cy);
+        }
+        if (leader && leader !== a && !byLeader) return this.goNear(a, f, leader.cx, leader.cy);
+        break;
+      }
       case 'chicken': {
         if (f.team === 'dark') {
-          const prey = near(foes.filter((b) => dist(b) <= C.ai.chase));
+          // 暗派奶鸡：配合自家奶蛙，去它正在打的人身边放炸弹
+          const focused = foes.find((b) => b.id === this.focus.dark);
+          const prey = focused && dist(focused) <= C.ai.chase ? focused : near(foes.filter((b) => dist(b) <= C.ai.chase));
           if (ready && prey) {
             if (this.cheb(a.cx, a.cy, prey.cx, prey.cy) <= 1) return this.stop(a, f), void this.lay(a);
             return this.goTo(a, f, prey.cx, prey.cy);
           }
           break;
         }
-        // 技能好了：走到自家奶蛙身边下蛋；下完就继续满场走
+        // 奶家队奶鸡：奶仆给奶蛙补血，所以跟着奶蛙；技能好了在它身边下蛋
         if (ready) {
           if (byLeader || !leader) return this.stop(a, f), void this.lay(a);
-          return this.goTo(a, f, leader.cx, leader.cy);
+          return this.goNear(a, f, leader.cx, leader.cy);
         }
+        if (goEscort()) return;
         break;
       }
       case 'dog': {
-        // 技能好了：走到自家奶蛙身边拉屎（别拉在敌人那边）
         if (ready && (byLeader || !leader)) {
           if (this.poop(a)) return this.stop(a, f);
-        } else if (ready && leader) return this.goTo(a, f, leader.cx, leader.cy);
+        } else if (ready && leader) return this.goNear(a, f, leader.cx, leader.cy);
+        if (goEscort()) return;
         const p = near(this.poops.filter((q) => q.by !== a.id).map((q) => ({ cx: q.x, cy: q.y })).filter((q) => dist(q) <= 6));
         if (p) return this.goExact(a, f, p.cx, p.cy);
-        break;
-      }
-      case 'powder': {
-        if (ready) {
-          if (foes.some((b) => this.cheb(a.cx, a.cy, b.cx, b.cy) <= C.roles.powder.stun.range)) return this.stop(a, f), void this.stun(a);
-          const frog = near(foes.filter((b) => this.f(b).role === 'frog' && dist(b) <= 6));
-          if (frog) return this.goTo(a, f, frog.cx, frog.cy);
-        }
         break;
       }
       case 'mouse': {
@@ -938,6 +1031,7 @@ export class Stage3World extends World {
           return this.goTo(a, f, sv.cx, sv.cy);
         }
         const other: Team = f.team === 'good' ? 'dark' : 'good';
+        // 偷金币：挑正在和自家奶蛙打的、不是奶蛙的敌人（有队友掩护）
         const mark = near(foes.filter((b) => this.f(b).role !== 'frog'));
         if (mark && this.t >= f.goldReadyAt && this.gold[other] > 0) {
           if (this.cheb(a.cx, a.cy, mark.cx, mark.cy) <= 1 && this.steal(a)) return this.stop(a, f);
@@ -960,6 +1054,28 @@ export class Stage3World extends World {
   private goTo(a: Actor, f: Fighter, x: number, y: number) {
     f.path = this.pathTo(a, x, y);
     this.walkPath(a, f);
+  }
+  /** 跟随：走到离目标 2 格的地方就停（跟着奶蛙但不贴着） */
+  private goNear(a: Actor, f: Fighter, x: number, y: number) {
+    f.path = this.pathTo(a, x, y, 2);
+    this.walkPath(a, f);
+  }
+  /** 身边贴着两个以上队友：往人少的方向挪一格（散开一点） */
+  private spreadOut(a: Actor, f: Fighter) {
+    const mates = this.standing(f.team).filter((b) => b !== a && this.cheb(a.cx, a.cy, b.cx, b.cy) <= 1);
+    if (mates.length < 2) return false;
+    let best: Dir | null = null;
+    let bestN = mates.length;
+    for (const d of DIR_LIST) {
+      const [dx, dy] = DIRS[d];
+      if (!this.passable(a, a.cx + dx, a.cy + dy)) continue;
+      const n = this.standing(f.team).filter((b) => b !== a && this.cheb(a.cx + dx, a.cy + dy, b.cx, b.cy) <= 1).length;
+      if (n < bestN) (bestN = n), (best = d);
+    }
+    if (!best) return false;
+    f.path = [];
+    a.wantDir = best;
+    return true;
   }
   /** 走到目标那一格上（捡东西） */
   private goExact(a: Actor, f: Fighter, x: number, y: number) {
@@ -1007,6 +1123,7 @@ export class Stage3World extends World {
 
   /** 网格寻路（BFS），走到离目标 near 格以内为止（默认走到旁边） */
   private pathTo(a: Actor, tx: number, ty: number, near = 1) {
+    const avoid = this.thunders.length > 0 && this.f(a).team === 'good' && this.f(a).seesThunder && !this.inThunder(a.cx, a.cy);
     const n = this.cols * this.rows;
     const prev = new Int32Array(n).fill(-2);
     const start = this.idx(a.cx, a.cy);
@@ -1023,6 +1140,8 @@ export class Stage3World extends World {
       }
       for (const [dx, dy] of Object.values(DIRS)) {
         if (!this.passable(a, x + dx, y + dy)) continue;
+        // 奶家队绕开天雷预警范围走
+        if (avoid && this.inThunder(x + dx, y + dy)) continue;
         const j = this.idx(x + dx, y + dy);
         if (prev[j] !== -2) continue;
         prev[j] = i;
