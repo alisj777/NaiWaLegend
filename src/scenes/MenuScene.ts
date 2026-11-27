@@ -55,11 +55,18 @@ export class MenuScene extends Phaser.Scene {
     const panel = this.add.container(0, 0).setAlpha(0.96);
     // 上下两根横轴的卷轴，按钮放在中间的纸面上
     // 通过第一关（等级 ≥ 2）后多出第二关入口，卷轴跟着变高
-    const has2 = loadLevel() >= 2;
-    panel.add(scrollPanel(this, x - 70, 250, bw + 140, has2 ? 400 : 320, 'tall'));
-    new Button(this, x, 330, bw, bh, TX.start, () => this.scene.start('Story'), THEME.orange);
-    new Button(this, x, 418, bw, bh, TX.stage1, () => this.scene.start('Stage1'), THEME.green);
-    if (has2) new Button(this, x, 506, bw, bh, TX.stage2, () => this.scene.start('Story', { chapter: 'ch2' }), THEME.blue);
+    // 通过第二关（等级 ≥ 3）后多出第三章入口；开发时总是显示，方便测试
+    const has2 = loadLevel() >= 2 || import.meta.env.DEV;
+    const has3 = loadLevel() >= 3 || import.meta.env.DEV;
+    // 四个按钮时按钮矮一点、挨近一点，卷轴不超出屏幕
+    const h = has3 ? 60 : bh;
+    const gap = has3 ? 74 : 88;
+    const y0 = has3 ? 318 : 330;
+    panel.add(scrollPanel(this, x - 70, 250, bw + 140, has3 ? 410 : has2 ? 400 : 320, 'tall'));
+    new Button(this, x, y0, bw, h, TX.start, () => this.scene.start('Story'), THEME.orange);
+    new Button(this, x, y0 + gap, bw, h, TX.stage1, () => this.scene.start('Stage1'), THEME.green);
+    if (has2) new Button(this, x, y0 + gap * 2, bw, h, TX.stage2, () => this.scene.start('Story', { chapter: 'ch2' }), THEME.blue);
+    if (has3) new Button(this, x, y0 + gap * 3, bw, h, TX.stage3, () => this.scene.start('Stage3'), THEME.orange);
 
     // 手机网页：全屏并锁定横屏（安卓支持；iPhone 的 Safari 不支持网页全屏，可以"添加到主屏幕"后打开）
     if (platform.canRequestFullscreen()) {

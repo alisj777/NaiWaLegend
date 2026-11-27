@@ -83,6 +83,37 @@ JOBS = [
     ("chapter2/egg_bomb.png", "stage1/egg_bomb.png", "cutout", 64, 72, {"tol": 45}),
     ("chapter2/thunder.png", "stage1/thunder.png", "glow", 160, 400),
     ("chapter2/triangle.png", "stage1/triangle.png", "cutout", 200, 200, {"tol": 60, "white_all": True}),
+    # 第三章：成年奶蛙 / 奶粉（普通 + 阴暗，四视图）、踢腿、奶狗、奶鼠、奶屎、金币、眩晕、地洞、成就图
+    ("chapter3/frog_adult_4view.png", "stage3/afrog_down.png", "cutout", 72, 88, {"tol": 45, "quad": 0, "white_all": True, "floor": True}),
+    ("chapter3/frog_adult_4view.png", "stage3/afrog_up.png", "cutout", 72, 88, {"tol": 45, "quad": 1, "white_all": True, "floor": True}),
+    ("chapter3/frog_adult_4view.png", "stage3/afrog_left.png", "cutout", 72, 88, {"tol": 45, "quad": 2, "white_all": True, "floor": True}),
+    ("chapter3/frog_adult_4view.png", "stage3/afrog_right.png", "cutout", 72, 88, {"tol": 45, "quad": 3, "white_all": True, "floor": True}),
+    ("chapter3/dark_frog_adult_4view.png", "stage3/dafrog_down.png", "cutout", 72, 88, {"tol": 45, "quad": 0, "white_all": True, "floor": True}),
+    ("chapter3/dark_frog_adult_4view.png", "stage3/dafrog_up.png", "cutout", 72, 88, {"tol": 45, "quad": 1, "white_all": True, "floor": True}),
+    ("chapter3/dark_frog_adult_4view.png", "stage3/dafrog_left.png", "cutout", 72, 88, {"tol": 45, "quad": 2, "white_all": True, "floor": True}),
+    ("chapter3/dark_frog_adult_4view.png", "stage3/dafrog_right.png", "cutout", 72, 88, {"tol": 45, "quad": 3, "white_all": True, "floor": True}),
+    ("chapter3/powder_4view.png", "stage3/powder_down.png", "cutout", 72, 88, {"tol": 45, "quad": 0, "white_all": True, "floor": True}),
+    ("chapter3/powder_4view.png", "stage3/powder_up.png", "cutout", 72, 88, {"tol": 45, "quad": 1, "white_all": True, "floor": True}),
+    ("chapter3/powder_4view.png", "stage3/powder_left.png", "cutout", 72, 88, {"tol": 45, "quad": 2, "white_all": True, "floor": True}),
+    ("chapter3/powder_4view.png", "stage3/powder_right.png", "cutout", 72, 88, {"tol": 45, "quad": 3, "white_all": True, "floor": True}),
+    ("chapter3/dark_powder_4view.png", "stage3/dpowder_down.png", "cutout", 72, 88, {"tol": 45, "quad": 0, "white_all": True, "floor": True}),
+    ("chapter3/dark_powder_4view.png", "stage3/dpowder_up.png", "cutout", 72, 88, {"tol": 45, "quad": 1, "white_all": True, "floor": True}),
+    ("chapter3/dark_powder_4view.png", "stage3/dpowder_left.png", "cutout", 72, 88, {"tol": 45, "quad": 2, "white_all": True, "floor": True}),
+    ("chapter3/dark_powder_4view.png", "stage3/dpowder_right.png", "cutout", 72, 88, {"tol": 45, "quad": 3, "white_all": True, "floor": True}),
+    ("chapter3/frog_kick.png", "stage3/afrog_kick.png", "cutout", 96, 96, {"tol": 45, "white_all": True, "floor": True}),
+    ("chapter3/dark_frog_kick.png", "stage3/dafrog_kick.png", "cutout", 96, 96, {"tol": 45, "white_all": True, "floor": True}),
+    ("otherCharacters/dog.png", "stage3/dog.png", "cutout", 84, 84, {"tol": 45, "white_all": True, "floor": True}),
+    ("chapter3/dark_dog.png", "stage3/dark_dog.png", "cutout", 84, 84, {"tol": 45, "white_all": True, "floor": True}),
+    ("otherCharacters/mouse.png", "stage3/mouse.png", "cutout", 72, 80, {"tol": 45, "white_all": True, "floor": True}),
+    ("chapter3/dark_mouse.png", "stage3/dark_mouse.png", "cutout", 72, 80, {"tol": 45, "white_all": True, "floor": True}),
+    ("chapter3/dark_servant_egg.png", "stage3/dark_servant.png", "cutout", 64, 72, {"tol": 45}),
+    ("otherCharacters/poop.png", "stage3/poop.png", "cutout", 48, 48, {"tol": 60}),
+    ("chapter3/gold_coin.png", "stage3/coin.png", "cutout", 48, 48, {"tol": 60}),
+    ("chapter3/stun_stars.png", "stage3/stun.png", "glow", 96, 96),
+    ("chapter3/mouse_hole.png", "stage3/hole.png", "cutout", 72, 72, {"tol": 60}),
+    ("chapter3/card_super_mole.png", "stage3/card_mole.jpg", "cover", 480, 640),
+    ("chapter3/achv_self_torment.png", "stage3/achv_torment.png", "cutout", 320, 320, {"tol": 45, "white_all": True, "floor": True}),
+    ("sigma/sigma_crossed_arms.png", "stage3/achv_sigma.png", "cutout", 320, 320, {"tol": 45, "white_all": True, "floor": True}),
     # 抓手：张开 / 合上，爪子朝上（画面里按伸出方向旋转）
     ("chapter2/claw_open.png", "stage1/claw_open.png", "cutout", 96, 96, {"tol": 60}),
     ("chapter2/claw_closed.png", "stage1/claw_closed.png", "cutout", 96, 96, {"tol": 60}),
@@ -211,10 +242,24 @@ def glow(img: Image.Image) -> Image.Image:
     return trim(Image.fromarray(out, "RGBA"))
 
 
-def cutout(img: Image.Image, tol=42, glass=False, white_bg_fallback=None, white_all=False) -> Image.Image:
+def cutout(img: Image.Image, tol=42, glass=False, white_bg_fallback=None, white_all=False, floor=False) -> Image.Image:
     if has_transparency(img):
         return trim(img.convert("RGBA"))
-    return trim(cutout_untrimmed(img, tol, glass, white_all))
+    out = cutout_untrimmed(img, tol, glass, white_all)
+    return trim(clear_floor(out) if floor else out)
+
+
+def clear_floor(img: Image.Image) -> Image.Image:
+    """去掉脚下的灰色地面阴影：只在图片下面 18% 里，把发灰、偏亮的像素变透明（角色的颜色都有饱和度，不受影响）"""
+    a = np.array(img.convert("RGBA")).astype(np.int16)
+    h = a.shape[0]
+    rgb = a[..., :3]
+    mx = rgb.max(axis=2)
+    mn = rgb.min(axis=2)
+    grey = (mx - mn < 55) & (mx > 185)
+    grey[: int(h * 0.82)] = False
+    a[..., 3][grey] = 0
+    return Image.fromarray(a.astype(np.uint8), "RGBA")
 
 
 def cutout_untrimmed(img: Image.Image, tol=42, glass=False, white_all=False) -> Image.Image:

@@ -95,6 +95,6 @@ export const STAGE2_TEXT = {
     eggs: (n: number) => `救下的奶蛋：${n} 颗`,
     retry: '重新挑战',
     menu: '返回菜单',
-    comingSoon: '下一章 敬请期待',
+    nextChapter: '进入第三章',
   },
 } as const;

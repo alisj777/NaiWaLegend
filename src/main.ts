@@ -7,6 +7,7 @@ import { ResultScene } from './scenes/ResultScene';
 import { StoryScene } from './scenes/StoryScene';
 import { Stage1Scene } from './scenes/Stage1Scene';
 import { Stage2Scene } from './scenes/Stage2Scene';
+import { Stage3Scene } from './scenes/Stage3Scene';
 
 import { fitGameToScreen } from './battle/layout';
 
@@ -37,6 +38,6 @@ const game = new Phaser.Game({
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
   // 手机上要能一只手按方向键、另一只手同时按举起
   input: { activePointers: 3 },
-  scene: [BootScene, MenuScene, StoryScene, Stage1Scene, Stage2Scene, BattleScene, DuelScene, ResultScene],
+  scene: [BootScene, MenuScene, StoryScene, Stage1Scene, Stage2Scene, Stage3Scene, BattleScene, DuelScene, ResultScene],
 });
 fitGameToScreen(game);

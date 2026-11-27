@@ -402,7 +402,7 @@ export class Stage2Scene extends Stage1Scene {
       showGuide(this, 230, 330, { from: 'left', height: 200, depth: 102 });
     }
     const btns: Button[] = [];
-    if (o.win) btns.push(new Button(this, 430, 400, 200, 60, R.comingSoon, () => {}, THEME.green).setEnabled(false));
+    if (o.win) btns.push(new Button(this, 430, 400, 200, 60, R.nextChapter, () => this.scene.start('Stage3'), THEME.green));
     btns.push(new Button(this, o.win ? 645 : 440, 400, 190, 60, R.retry, () => this.scene.restart(), THEME.orange));
     btns.push(new Button(this, o.win ? 850 : 645, 400, 190, 60, R.menu, () => this.scene.start('Menu'), THEME.blue));
     btns.forEach((b) => b.setDepth(101));
