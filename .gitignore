@@ -9,3 +9,8 @@ release/
 android/app/build/
 android/.gradle/
 android/local.properties
+
+# 安卓正式签名密钥：绝不提交
+*.jks
+*.keystore
+android/keystore.properties

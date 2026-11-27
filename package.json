@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "android": "npm run build && npx cap sync android && cd android && ./gradlew assembleDebug"
+    "android": "npm run build && npx cap sync android && cd android && JAVA_HOME=$(/usr/libexec/java_home -v 22) ./gradlew assembleDebug",
+    "android:release": "npm run build && npx cap sync android && cd android && JAVA_HOME=$(/usr/libexec/java_home -v 22) ./gradlew assembleRelease bundleRelease",
+    "android:keystore": "bash tools/make_keystore.sh"
   },
   "dependencies": {
     "@capacitor/core": "^7.6.11",
