@@ -556,9 +556,9 @@ export class Stage1Scene extends Phaser.Scene {
       close();
       this.onIntroDone();
     }, THEME.orange);
-    // 预留广告位：看激励视频直接跳过本关（以后上微信接入广告）
-    const ad = new Button(this, 780, 550, 200, 60, TX.intro.adSkip, () => this.skipByAd(close), THEME.grey);
-    btns.push(prevBtn, nextBtn, ad);
+    btns.push(prevBtn, nextBtn);
+    // 广告位：看激励视频直接跳过本关（只在有广告的平台显示，网页版和安卓包没有）
+    if (platform.hasAds) btns.push(new Button(this, 780, 550, 200, 60, TX.intro.adSkip, () => this.skipByAd(close), THEME.grey));
     btns.forEach((b) => b.setDepth(102));
     render();
   }
@@ -590,10 +590,12 @@ export class Stage1Scene extends Phaser.Scene {
     const btns: Button[] = [];
     const done = () => btns.forEach((b) => b.destroy());
     // 下一章还没做好：晋级后显示"敬请期待"；淘汰时提供看广告跳过
+    // 淘汰时：有广告的平台多一个"看广告跳过本关"；没有广告时只剩两个按钮，居中
+    const three = pass || platform.hasAds;
     if (pass) btns.push(new Button(this, 430, 500, 200, 60, R.nextChapter, () => (done(), this.levelUp()), THEME.green));
-    else btns.push(new Button(this, 430, 500, 200, 60, TX.intro.adSkip, () => this.skipByAd(() => (done(), layer.destroy())), THEME.grey));
-    btns.push(new Button(this, 645, 500, 190, 60, R.retry, () => (done(), this.scene.restart()), THEME.orange));
-    btns.push(new Button(this, 850, 500, 190, 60, R.menu, () => (done(), this.scene.start('Menu')), THEME.blue));
+    else if (platform.hasAds) btns.push(new Button(this, 430, 500, 200, 60, TX.intro.adSkip, () => this.skipByAd(() => (done(), layer.destroy())), THEME.grey));
+    btns.push(new Button(this, three ? 645 : 440, 500, 190, 60, R.retry, () => (done(), this.scene.restart()), THEME.orange));
+    btns.push(new Button(this, three ? 850 : 650, 500, 190, 60, R.menu, () => (done(), this.scene.start('Menu')), THEME.blue));
     btns.forEach((b) => b.setDepth(101));
   }
 

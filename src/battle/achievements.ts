@@ -78,11 +78,13 @@ export function showAchievement(scene: Phaser.Scene, id: AchievementId, opts: { 
   if (meta.card && info.share) {
     let told = false;
     btns.push(
-      new Button(scene, 760, 420, 210, 60, id === 'superMole' ? A.shareMole : A.share, () => {
-        platform.share(info.share);
-        // 网页版还不能真的转发，提示一下（只提示一次）
-        if (platform.name === 'web' && !told) layer.add(bodyText(scene, 860, 500, A.shared, 15, 360).setOrigin(0.5).setColor('#d8d0c0'));
-        told = true;
+      new Button(scene, 760, 420, 210, 60, id === 'superMole' ? A.shareMole : A.share, async () => {
+        const r = await platform.share(info.share);
+        // 没有系统分享面板时，提示已经复制了分享文字（只提示一次）
+        if (r !== 'shared' && !told && layer.active) {
+          layer.add(bodyText(scene, 860, 500, r === 'copied' ? A.copied : A.shareNone, 15, 360).setOrigin(0.5).setColor('#d8d0c0'));
+          told = true;
+        }
       }, THEME.green),
     );
   }

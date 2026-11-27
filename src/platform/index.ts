@@ -6,6 +6,11 @@
  */
 export interface Platform {
   readonly name: 'web' | 'wechat';
+  /**
+   * 有没有广告。网页版和安卓包没有广告（广告按钮都不显示）；以后微信小游戏打开。
+   * 开发测试广告位时，可以用环境变量 VITE_ADS=on 打开网页版的广告按钮。
+   */
+  readonly hasAds: boolean;
   /** 启动参数（网页是 ?key=value，小游戏是 query） */
   getQuery(key: string): string | null;
   /** 本地存档（网页 localStorage，小游戏 wx.setStorageSync） */
@@ -16,8 +21,11 @@ export interface Platform {
   requestFullscreenLandscape(): void;
   /** 短震动反馈（不支持的平台静默忽略） */
   vibrate(ms?: number): void;
-  /** 分享（网页暂不实现，小游戏用 wx.shareAppMessage） */
-  share(title: string): void;
+  /**
+   * 分享：网页 / 安卓包有系统分享面板就弹出来，没有就把分享文字复制到剪贴板；小游戏用 wx.shareAppMessage。
+   * 返回 shared（弹出了分享）、copied（已复制）、none（都不支持）
+   */
+  share(title: string): Promise<'shared' | 'copied' | 'none'>;
   /**
    * 激励视频广告：看完返回 true，中途关闭返回 false。
    * 网页版没有广告，直接返回 true 方便测试；微信版改用 wx.createRewardedVideoAd。
@@ -34,10 +42,16 @@ export interface Platform {
   waitFont(family: string, timeout: number): Promise<void>;
 }
 
+/** 是不是在安卓 / iOS 原生包（Capacitor）里运行 */
+export function isNativeApp() {
+  return !!(window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform?.();
+}
+
 type LockableOrientation = ScreenOrientation & { lock?: (o: string) => Promise<void> };
 
 const web: Platform = {
   name: 'web',
+  hasAds: import.meta.env.VITE_ADS === 'on',
   getQuery: (key) => new URLSearchParams(location.search).get(key),
   load(key, fallback) {
     try {
@@ -54,7 +68,8 @@ const web: Platform = {
       // 隐私模式等情况下存不了，忽略
     }
   },
-  canRequestFullscreen: () => 'ontouchstart' in window && !!document.fullscreenEnabled,
+  // 安卓包（Capacitor）本身就是全屏横屏，不显示全屏按钮
+  canRequestFullscreen: () => 'ontouchstart' in window && !!document.fullscreenEnabled && !isNativeApp(),
   requestFullscreenLandscape() {
     document.documentElement
       .requestFullscreen?.()
@@ -62,7 +77,23 @@ const web: Platform = {
       .catch(() => {});
   },
   vibrate: (ms = 15) => navigator.vibrate?.(ms),
-  share: () => {},
+  share: async (title) => {
+    const text = `${title} —— 奶蛙家族`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: '奶蛙家族', text });
+        return 'shared';
+      }
+    } catch {
+      // 用户取消分享也会走到这里，再试复制
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      return 'copied';
+    } catch {
+      return 'none';
+    }
+  },
   hideSplash: () => document.getElementById('splash')?.remove(),
   setPageColor: (color) => {
     const css = `#${color.toString(16).padStart(6, '0')}`;
@@ -78,7 +109,7 @@ const web: Platform = {
       new Promise<void>((r) => setTimeout(r, timeout)),
     ]).catch(() => undefined),
   showRewardedAd: async (placement) => {
-    console.info(`[广告位] ${placement}：网页版没有广告，直接视为看完`);
+    console.info(`[广告位] ${placement}：网页版没有真实广告，直接视为看完`);
     return true;
   },
 };

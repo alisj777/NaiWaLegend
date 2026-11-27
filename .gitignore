@@ -5,3 +5,7 @@ dist
 art/reference/menu/*.ttf
 __pycache__/
 docs/*.zip
+release/
+android/app/build/
+android/.gradle/
+android/local.properties
