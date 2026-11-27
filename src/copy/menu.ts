@@ -7,6 +7,7 @@ export const MENU_TEXT = {
   /** 通过第一关后才出现 */
   stage2: '第二关 · 天雷已废废',
   stage3: '第三章 · 分化',
+  stage4: '第四章 · 终极决斗',
   battle: '对战模式',
   fullscreen: '全屏横屏',
 } as const;

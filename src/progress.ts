@@ -29,6 +29,16 @@ export function addToStash(add: Stash): Stash {
   return s;
 }
 
+/** 用掉一瓶喝的：优先奶瓶，没有就奶茶；都没有返回 null（第三章庇护所里的奶蛋长大要喝） */
+export function drinkBottle(): 'milk' | 'tea' | null {
+  const s = loadStash();
+  const kind = s.milk > 0 ? 'milk' : s.tea > 0 ? 'tea' : null;
+  if (!kind) return null;
+  s[kind]--;
+  platform.save(KEY, s);
+  return kind;
+}
+
 /** 第一关存下的庇护所形状（按闭合先后顺序），第二关开局依次放置 */
 export interface SavedShelter {
   walls: [number, number][];
@@ -48,6 +58,38 @@ export function loadShelters(): SavedShelter[] {
 }
 
 /** 玩家等级：第一关 Lv.1 奶蛋，过关后 Lv.2 小奶蛙 */
+const ACHV_KEY = 'naiwa.achievements';
+/** 已解锁的成就（编号列表） */
+export function loadAchievements(): string[] {
+  return platform.load<string[]>(ACHV_KEY, []);
+}
+/** 解锁成就；第一次解锁返回 true */
+export function unlockAchievement(id: string): boolean {
+  const list = loadAchievements();
+  if (list.includes(id)) return false;
+  platform.save(ACHV_KEY, [...list, id]);
+  return true;
+}
+
+const CH3_KEY = 'naiwa.ch3result';
+/** 第三章打出的结果（解锁第四章用）：good 奶家队赢、dark 暗派赢、mole 超能串子 */
+export type Ch3Result = 'good' | 'dark' | 'mole';
+export function saveCh3Result(r: Ch3Result) {
+  platform.save(CH3_KEY, r);
+}
+export function loadCh3Result(): Ch3Result | null {
+  return platform.load<Ch3Result | null>(CH3_KEY, null);
+}
+
+const EGGS_KEY = 'naiwa.eggs';
+/** 第二关救下的奶蛋，带到第三章当奶仆 */
+export function saveEggs(n: number) {
+  platform.save(EGGS_KEY, n);
+}
+export function loadEggs(): number {
+  return platform.load<number>(EGGS_KEY, 0);
+}
+
 export function loadLevel(): number {
   return platform.load<number>(LEVEL_KEY, 1);
 }

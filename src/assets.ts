@@ -32,6 +32,10 @@ export const STORY_IMAGES = {
   ch2_strike: 'assets/story/ch2_strike.jpg', // 天雷劈中村民，奶鸡和小奶蛙变暗紫色
   ch2_madness: 'assets/story/ch2_madness.jpg', // 感染的村民郁郁寡欢、暴躁、互相攻击
   ch2_think: 'assets/story/ch2_think.jpg', // 小奶蛙握拳思考
+  end_celebrate: 'assets/story/end_celebrate.jpg', // 结局（奶家军赢）：奶家村恢复往日风光，众宾欢也
+  end_eyes: 'assets/story/end_eyes.jpg', // 结局（奶家军赢）：奶蛙望向一边，暗处有一双眼睛
+  end_occupied: 'assets/story/end_occupied.jpg', // 结局（暗派赢）：整个村子被占领
+  end_jiejie: 'assets/story/end_jiejie.jpg', // 结局（暗派赢）：众宾桀桀桀
 };
 export type StoryImageKey = keyof typeof STORY_IMAGES;
 export const storyKey = (k: string) => `story-${k}`;
@@ -39,6 +43,7 @@ export const storyKey = (k: string) => `story-${k}`;
 /** 序章音频 */
 export const STORY_SOUNDS = {
   laugh: 'audio/sfx_laugh_group.mp3', // 多人大笑（全家福那一页播放）
+  jiejie: 'audio/sfx_jiejie.mp3', // 桀桀桀（暗派结局）
 };
 
 /** 第一关「狂风夜」 */
@@ -100,6 +105,16 @@ export const STAGE1_IMAGES = {
   achv_torment: 'assets/stage3/achv_torment.png',
   achv_sigma: 'assets/stage3/achv_sigma.png',
   card_mole: 'assets/stage3/card_mole.jpg', // 超能串子卡牌
+  card_cant_hold: 'assets/stage3/card_cant_hold.jpg', // 无法绷住卡牌
+  card_breaker: 'assets/stage3/card_breaker.jpg', // 破绷者卡牌
+  // 第四章：西格玛（发射）、暗西格玛（站立 / 扭腰 / 中针）、解毒针、决斗场、超级串子卡牌（细长）
+  sigma_shoot: 'assets/stage4/sigma_shoot.png',
+  dark_sigma_idle: 'assets/stage4/dark_sigma_idle.png',
+  dark_sigma_twist: 'assets/stage4/dark_sigma_twist.png',
+  dark_sigma_hit: 'assets/stage4/dark_sigma_hit.png',
+  needle: 'assets/stage4/needle.png',
+  duel_arena: 'assets/stage4/duel_arena.jpg',
+  card_mole_x3: 'assets/stage4/card_mole_x3.jpg',
   claw_open: 'assets/stage1/claw_open.png', // 抓手（张开）：伸出去时
   claw_closed: 'assets/stage1/claw_closed.png', // 抓手（合上）：抓着蛋收回时
   egg_down: 'assets/stage1/egg_down.png',
@@ -119,7 +134,17 @@ export const BGM = {
   doom: 'audio/bgm_doom.mp3', // 末世来临：序章末世、寒冬
   rebirth: 'audio/bgm_rebirth.mp3', // 重生：序章重生、系统登场
   chapter1: 'audio/bgm_chapter1.mp3', // 第一关狂风夜
+  sigma: 'audio/bgm_sigma.mp3', // 第四章 sigma 对决
 };
+
+/** 结算音乐：只放一遍（8～10 秒），放的时候背景音乐压低 */
+export const JINGLES = {
+  goodWin: 'audio/jingle_good_win.mp3', // 第四章奶家军胜利结算
+  mole1: 'audio/jingle_mole1.mp3', // 串子第一次结算（第三章解锁隐藏彩蛋：超能串子）
+  mole2: 'audio/jingle_mole2.mp3', // 串子第二次结算（第四章解锁超级串子）
+};
+export type JingleKey = keyof typeof JINGLES;
+export const jingleKey = (k: JingleKey) => `jingle-${k}`;
 export type BgmKey = keyof typeof BGM;
 export const bgmKey = (k: BgmKey) => `bgm-${k}`;
 
@@ -145,6 +170,7 @@ export function allAssets() {
   const audio: [string, string][] = [
     ...Object.entries(STORY_SOUNDS).map(([k, u]) => [storyKey(k), u] as [string, string]),
     ...Object.entries(BGM).map(([k, u]) => [bgmKey(k as BgmKey), u] as [string, string]),
+    ...Object.entries(JINGLES).map(([k, u]) => [jingleKey(k as JingleKey), u] as [string, string]),
   ];
   return { images, audio, sheets: Object.entries(SPRITESHEETS) };
 }

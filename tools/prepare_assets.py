@@ -49,6 +49,11 @@ JOBS = [
     ("intro/dying_frog.png", "story/dying.jpg", "cover", 2560, 1120),
     # 第二章剧情（插画区 1280×560）
     ("chapter2/ch2_school.png", "story/ch2_school.jpg", "cover", 2560, 1120),
+    # 第四章结局：众宾欢也、暗处的眼睛（奶家军赢）；村子被占领、众宾桀桀桀（暗派赢）
+    ("chapter4/end_celebrate.png", "story/end_celebrate.jpg", "cover", 2560, 1120),
+    ("chapter4/end_eyes.png", "story/end_eyes.jpg", "cover", 2560, 1120),
+    ("chapter4/end_occupied.png", "story/end_occupied.jpg", "cover", 2560, 1120),
+    ("chapter4/end_jiejie.png", "story/end_jiejie.jpg", "cover", 2560, 1120),
     ("chapter2/ch2_strike.png", "story/ch2_strike.jpg", "cover", 2560, 1120),
     ("chapter2/ch2_madness.png", "story/ch2_madness.jpg", "cover", 2560, 1120),
     ("chapter2/ch2_think.png", "story/ch2_think.jpg", "cover", 2560, 1120),
@@ -112,8 +117,18 @@ JOBS = [
     ("chapter3/stun_stars.png", "stage3/stun.png", "glow", 96, 96),
     ("chapter3/mouse_hole.png", "stage3/hole.png", "cutout", 72, 72, {"tol": 60}),
     ("chapter3/card_super_mole.png", "stage3/card_mole.jpg", "cover", 480, 640),
+    ("chapter3/card_cant_hold.png", "stage3/card_cant_hold.jpg", "cover", 480, 640),
+    ("chapter3/card_breaker.png", "stage3/card_breaker.jpg", "cover", 480, 640),
     ("chapter3/achv_self_torment.png", "stage3/achv_torment.png", "cutout", 320, 320, {"tol": 45, "white_all": True, "floor": True}),
     ("sigma/sigma_crossed_arms.png", "stage3/achv_sigma.png", "cutout", 320, 320, {"tol": 45, "white_all": True, "floor": True}),
+    # 第四章：西格玛（发射）、暗西格玛（站立 / 扭腰 / 中针）、解毒针（黑底发光）、决斗场、超级串子卡牌（细长）
+    ("chapter4/sigma_shoot.png", "stage4/sigma_shoot.png", "cutout", 420, 520, {"tol": 45, "white_all": True, "floor": True}),
+    ("chapter4/dark_sigma_idle.png", "stage4/dark_sigma_idle.png", "cutout", 420, 520, {"tol": 45, "white_all": True, "floor": True}),
+    ("chapter4/dark_sigma_twist.png", "stage4/dark_sigma_twist.png", "cutout", 420, 520, {"tol": 45, "white_all": True, "floor": True}),
+    ("chapter4/dark_sigma_hit.png", "stage4/dark_sigma_hit.png", "cutout", 420, 520, {"tol": 45, "white_all": True, "floor": True}),
+    ("chapter4/needle.png", "stage4/needle.png", "glow", 160, 80),
+    ("chapter4/duel_arena.png", "stage4/duel_arena.jpg", "cover", 1600, 900),
+    ("chapter4/card_super_mole_x3.png", "stage4/card_mole_x3.jpg", "cover", 320, 640),
     # 抓手：张开 / 合上，爪子朝上（画面里按伸出方向旋转）
     ("chapter2/claw_open.png", "stage1/claw_open.png", "cutout", 96, 96, {"tol": 60}),
     ("chapter2/claw_closed.png", "stage1/claw_closed.png", "cutout", 96, 96, {"tol": 60}),
@@ -134,6 +149,11 @@ AUDIO_JOBS = [
     ("intro：重生.mp3", "bgm_rebirth.mp3", "96k"),
     ("chapter1.mp3", "bgm_chapter1.mp3", "96k"),
     ("多人大笑.mp3", "sfx_laugh_group.mp3", "128k"),
+    ("反派大笑（多人）.mp3", "sfx_jiejie.mp3", "128k"),
+    ("chapter4：sigma对决.mp3", "bgm_sigma.mp3", "96k"),
+    ("chapter4 奶家军胜利结算.mp3", "jingle_good_win.mp3", "128k"),
+    ("串子第一次结算.mp3", "jingle_mole1.mp3", "128k"),
+    ("串子第二次结算.mp3", "jingle_mole2.mp3", "128k"),
 ]
 
 

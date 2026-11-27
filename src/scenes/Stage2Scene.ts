@@ -3,7 +3,7 @@ import { STAGE2 as C } from '../config/stage2';
 import { STAGE2_TEXT as TX } from '../copy/stage2';
 import { Button, THEME, bodyText, titleText } from '../battle/ui';
 import { showGuide } from '../battle/guide';
-import { loadShelters, loadStash, saveLevel } from '../progress';
+import { loadShelters, loadStash, saveEggs, saveLevel } from '../progress';
 import { Actor, itemName } from '../stage1/world';
 import { Stage2World } from '../stage2/world';
 import { TRIANGLE_ANIM } from '../assets';
@@ -399,6 +399,7 @@ export class Stage2Scene extends Stage1Scene {
     layer.add(bodyText(this, 640, 330, R.eggs(this.w2.savedEggs()), 20).setOrigin(0.5).setColor('#b5651d'));
     if (o.win) {
       saveLevel(3);
+      saveEggs(this.w2.savedEggs());
       showGuide(this, 230, 330, { from: 'left', height: 200, depth: 102 });
     }
     const btns: Button[] = [];

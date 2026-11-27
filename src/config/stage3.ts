@@ -21,39 +21,64 @@ export const STAGE3 = {
   teams: { good: 5, dark: 3 },
   /** 角色分类：每队至少要有一个攻击、一个奶、一个辅助（奶鼠算攻击 【补充】） */
   classes: { attack: ['frog', 'mouse'], heal: ['chicken', 'dog'], support: ['powder'] },
+  /** 每队某种角色最多几个（没写的不限） */
+  maxPerTeam: { powder: 1 },
   /** 奶家队的人被天雷劈中几次黑化 */
   hitsToTurn: 3,
+  /** 奶家队全队累计被劈中这么多次，你也黑化（进入新一轮） */
+  teamHitsToTurn: 6,
+  /** 结算成就的门槛 【补充】 */
+  achieve: {
+    cantHold: 10, // 一局里复活（含替身原地复活）这么多次 → 无法绷住（模拟：暗派奶鼠一局中位 15 次，奶家队约 4 次）
+    breaker: 50, // 一局里造成这么多点伤害 → 破绷者（模拟：电脑暗派奶蛙一局两百多，暗派奶鸡十几）
+  },
   /** 打倒一个敌人得几个金币 【补充】 */
   killGold: 1,
   /** 倒下后几秒在自家庇护所复活 【补充】 */
   respawn: 6,
+  /** 暗派人少，复活更快 */
+  darkRespawn: 3,
   /**
-   * 一方全部同时倒下就提前结束。第 1 步只有奶蛙能打，暗派 3 人太容易被团灭（模拟里大多一分钟就结束），
-   * 先关掉；第 2 步其他角色有了技能再打开试 【补充】
+   * 一方全部同时倒下就提前结束。暗派只有 3 人，太容易被团灭：
+   * 第 2 步加上所有技能后模拟 40 局，打开时 31 局在 70 秒左右团灭结束，所以先关掉 【补充】
    */
   wipeWin: false,
 
   /** 电脑：思考间隔、多远开始追 / 逃、速度（相对角色本身） 【补充】 */
-  ai: { think: 0.4, chase: 9, flee: 2.5, speed: 0.85 },
+  /**
+   * chase：奶蛙看到多近的敌人才去追（远了就满场走动，不扎堆）；flee：敌方奶蛙多近时其他角色跑开；
+   * roamPick：每次思考时换一个闲逛目标的概率
+   */
+  ai: { think: 0.4, chase: 5, flee: 3, speed: 0.85, roamPick: 0.04 },
 
   /** 天雷保留，但比第二关稀 【补充】 */
-  thunder: { firstAt: 10, interval: 15, perWave: 3, warnTime: 1.5, radius: 1 },
+  thunder: {
+    firstAt: 5,
+    interval: 5,
+    perWave: 3,
+    warnTime: 1.5,
+    radius: 1, // 劈中落点周围一圈，即 3×3 格；闭合庇护所里安全
+    aimedChance: 0.4, // 有一部分瞄准奶家队的人附近
+    /** 每次劈中掉多少血（奶粉没规定，先按奶鼠 【补充】） */
+    damage: { frog: 1, chicken: 0.5, dog: 0.5, mouse: 0.7, powder: 0.7 },
+  },
 
   /** 各角色：血量、移动速度（相对第一关的你）、技能 */
   roles: {
     /** 主攻：一只脚走路，一只脚踢人 */
-    frog: { hp: 8, speed: 1, kick: { damage: 2, push: 1, cooldown: 1, range: 1 } },
+    frog: { hp: 8, speed: 1, kick: { damage: 2, darkDamage: 4 /* 暗派奶蛙踢得更狠（双倍） */, push: 1, cooldown: 1, range: 2 /* 2 格内（含斜角）都踢得到 */ } },
     /**
      * 奶妈：奶家队的奶鸡下蛋 → 奶仆（还是奶蛋的样子）跟着己方奶蛙叫"主人"，定时给主人补血；
      * 暗派的奶鸡下的是炸弹蛋，下在奶家队旁边，bombAfter 秒后爆炸 【补充】
      */
-    chicken: { hp: 5, speed: 0.9, layEvery: 8, bombAfter: 4 },
+    chicken: { hp: 5, speed: 0.9, layEvery: 8, bombAfter: 4, bombRadius: 2.5, bombDamage: 6 /* 原 3，双倍 */ },
     /** 经济：产奶屎，也吃奶屎回血；3 个奶屎换 1 金币，谁捡到算谁的 */
-    dog: { hp: 5, speed: 1, poopEvery: 6, eatHeal: 1 /* 【补充】 */, poopPerGold: 3 },
+    dog: { hp: 5, speed: 1, poopEvery: 6, eatHeal: 1 /* 【补充】 */, poopPerGold: 3, maxPoops: 14 /* 场上最多几坨【补充】 */ },
     /** 控制：迷惑 → 对方眩晕，不能移动、不能放技能 */
-    powder: { hp: 4, speed: 1, stun: { range: 2, duration: 3, cooldown: 12 } /* range、cooldown【补充】 */ },
+    powder: { hp: 4, speed: 1, stun: { range: 1, duration: 3, cooldown: 12 } /* range 1 = 只有贴身（含斜角）才能迷惑 */ /* range、cooldown【补充】 */ },
     /** 盗贼：跑得快，能从墙下钻进庇护所，偷蛋 / 奶屎 / 金币，啃砖 */
-    mouse: { hp: 3, speed: 1.4, gnaw: 3, stealCooldown: 2 /* 【补充】 */ },
+    /** 偷奶仆冷却 stealCooldown，偷金币冷却 goldCooldown、一次偷 stealGold 个 【补充】；钻墙、啃砖等第 3 步有庇护所后再做 */
+    mouse: { hp: 3, speed: 1.4, gnaw: 3, stealCooldown: 2, goldCooldown: 6, stealGold: 1 },
   },
 
   /** 奶仆：奶鸡下的蛋孵出来，跟着主人（己方奶蛙） */
@@ -61,6 +86,13 @@ export const STAGE3 = {
     healEvery: 10, // 每 10 秒给主人补 1 血 【补充】
     heal: 1,
     safeRange: 2, // 离主人这么近，或者在庇护所里，就不会被感染 【补充】
+    attackRange: 1.5, // 敌人离奶仆这么近算在攻击 【补充】
+    followSpeed: 3, // 跟着主人走的速度（格/秒）【补充】
+    blastRadius: 1.5, // 感染后爆炸：范围内所有人掉 blastDamage 血 【补充】
+    blastDamage: 2,
+    thunderHits: 3, // 奶蛋被天雷劈中 3 次 → 感染，bombAfter 秒后爆炸
+    /** 第二关救下的奶蛋带进来，开局就是你这一队的奶仆（最多几只 【补充】） */
+    inheritMax: 6,
     infectAfter: 2, // 不安全时被攻击 2 秒 → 感染（同第二关）
     bombAfter: 3, // 感染后 3 秒爆炸（同第二关）
   },
@@ -73,7 +105,9 @@ export const STAGE3 = {
   nursery: {
     toFroglet: 60, // 喝第一瓶后 1 分钟 → 小奶蛙
     toFrog: 60, // 喝第二瓶后再 1 分钟（共 2 分钟）→ 奶蛙，成为替身
-    /** 优先喝奶瓶，没有就喝奶茶 【补充】 */
+    /** 优先喝奶瓶，没有就喝奶茶（从第一关攒下的库存里扣） 【补充】 */
     drinks: ['milk', 'tea'] as const,
+    /** 点奶仆、再点庇护所空格把它放进去：离你多远以内能点 【补充】 */
+    storeRange: 6,
   },
 } as const;

@@ -84,4 +84,27 @@ export const STORY_CH2 = {
   ],
 } as const;
 
-export type StoryPanelId = (typeof STORY.panels)[number]['id'] | (typeof STORY_CH2.panels)[number]['id'];
+/** 第四章结局：奶家军赢 */
+export const STORY_END_GOOD = {
+  finish: '返回菜单',
+  panels: [
+    { id: 'end_reward', title: '系统', text: '拯救奶家村！\n系统奖励到账！' },
+    { id: 'end_celebrate', title: '拯救奶家村', text: '奶家村恢复了往日的风光，众宾欢也。' },
+    { id: 'end_eyes', title: '……', text: '但是在欢笑声中，\n你总感觉有一双眼睛，在暗处盯着你……' },
+  ],
+} as const;
+
+/** 第四章结局：暗派赢 */
+export const STORY_END_DARK = {
+  finish: '返回菜单',
+  panels: [
+    { id: 'end_occupied', title: '奶家村沦陷', text: '整个村子被占领了……' },
+    { id: 'end_jiejie', title: '很会扭啊', text: '众宾桀桀桀——' },
+  ],
+} as const;
+
+export type StoryPanelId =
+  | (typeof STORY.panels)[number]['id']
+  | (typeof STORY_CH2.panels)[number]['id']
+  | (typeof STORY_END_GOOD.panels)[number]['id']
+  | (typeof STORY_END_DARK.panels)[number]['id'];

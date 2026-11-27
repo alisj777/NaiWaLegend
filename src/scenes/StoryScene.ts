@@ -5,7 +5,7 @@ import { Button, THEME, bodyText, label, pill, scrollPanel } from '../battle/ui'
 import { fitScreen, fullBg, matchPageColorToImage, screenEdges } from '../battle/layout';
 import { duckBgm, playBgm } from '../battle/music';
 import { Guide, showGuide } from '../battle/guide';
-import { STORY, STORY_CH2, StoryPanelId } from '../copy/story';
+import { STORY, STORY_CH2, STORY_END_DARK, STORY_END_GOOD, StoryPanelId } from '../copy/story';
 import { BgmKey, STORY_IMAGES, StoryImageKey, storyKey } from '../assets';
 
 /** 剧情插画和音频在 src/assets.ts，由启动加载页统一预载；缺图的页面自动用代码画的占位图 */
@@ -21,7 +21,7 @@ interface PanelArt {
   /** 有图就显示图片（多张时，文字打完后依次淡入下一张），否则用 draw 画占位 */
   image?: ImageKey | ImageKey[];
   /** 某张图出现时播放的声音 */
-  sound?: { on: ImageKey; key: 'laugh' };
+  sound?: { on: ImageKey; key: 'laugh' | 'jiejie' };
   /** 引导角色「系统」在第几段文字开始时飘进来（从 0 算）；不填表示这一页没有系统 */
   systemAtPart?: number;
   /** 角色说话页：名字标签显示 title（蓝色，不带页码） */
@@ -193,6 +193,58 @@ const ART: Record<StoryPanelId, PanelArt> = {
       s.put((gg) => art.drawHero(gg, 3, skin.colors.light), 640, 390, 2.6);
     },
   },
+  // ───── 第四章结局（插图到了放进 art/reference/chapter4，没到时用代码画的占位）─────
+  end_reward: {
+    image: 'village',
+    systemAtPart: 0,
+    bgm: 'happy',
+    draw: (s) => {
+      s.ground();
+    },
+  },
+  end_celebrate: {
+    image: 'end_celebrate',
+    bgm: 'happy',
+    draw: (s, skin) => {
+      s.ground();
+      s.put((g) => art.drawHero(g, 4, skin.colors.light), 640, 330, 2.2);
+      s.put((g) => art.drawChicken(g, FRIEND_COLOR), 420, 360, 1.5);
+      s.put((g) => art.drawDog(g, FRIEND_COLOR), 860, 370, 1.4);
+    },
+  },
+  end_eyes: {
+    image: 'end_eyes',
+    bgm: 'doom',
+    draw: (s, skin) => {
+      s.ground(0x4a5a3a);
+      s.sky(0x1a1d2a);
+      s.put((g) => art.drawHero(g, 4, skin.colors.light), 520, 360, 2.2);
+      // 暗处的一双眼睛
+      const g = s.add.graphics();
+      g.fillStyle(0xb57aff).fillEllipse(1000, 200, 26, 12).fillEllipse(1050, 200, 26, 12);
+      s.layer.add(g);
+    },
+  },
+  end_occupied: {
+    image: 'end_occupied',
+    bgm: 'doom',
+    draw: (s) => {
+      s.ground(0x3a2f4a);
+      s.sky(0x1d1230);
+      const g = s.add.graphics();
+      art.drawBolt(g, 900, 0, 220);
+      s.layer.add(g);
+    },
+  },
+  end_jiejie: {
+    image: 'end_jiejie',
+    sound: { on: 'end_jiejie', key: 'jiejie' },
+    bgm: 'doom',
+    draw: (s) => {
+      s.ground(0x3a2f4a);
+      s.sky(0x1d1230);
+    },
+  },
 };
 
 /**
@@ -202,9 +254,11 @@ const ART: Record<StoryPanelId, PanelArt> = {
 const CHAPTERS = {
   intro: { panels: STORY.panels.map((p) => ({ ...p, ...ART[p.id] })), finish: STORY.finish, next: 'Stage1' },
   ch2: { panels: STORY_CH2.panels.map((p) => ({ ...p, ...ART[p.id] })), finish: STORY_CH2.finish, next: 'Stage2' },
+  end_good: { panels: STORY_END_GOOD.panels.map((p) => ({ ...p, ...ART[p.id] })), finish: STORY_END_GOOD.finish, next: 'Menu' },
+  end_dark: { panels: STORY_END_DARK.panels.map((p) => ({ ...p, ...ART[p.id] })), finish: STORY_END_DARK.finish, next: 'Menu' },
 };
 type ChapterKey = keyof typeof CHAPTERS;
-type Panel = (typeof CHAPTERS)['intro']['panels'][number] | (typeof CHAPTERS)['ch2']['panels'][number];
+type Panel = (typeof CHAPTERS)[ChapterKey]['panels'][number];
 
 export class StoryScene extends Phaser.Scene {
   private index = 0;
